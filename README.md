@@ -14,7 +14,9 @@
 **Bao** is a desktop Markdown editor that keeps everything on your machine — no accounts, no cloud, no subscriptions.
 Open it and start writing. Your notes are plain Markdown files you can access anywhere.
 
-Built with **Electron, React, Vite, and Tailwind CSS**.
+<p align="center">
+  <img src=".github/editor.gif" alt="editor" width="450" />
+</p>
 
 ---
 
