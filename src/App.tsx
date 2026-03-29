@@ -125,86 +125,6 @@ export default function App() {
       <Sidebar />
       <div className="workspace" id="workspace">
         <div
-          className={`workspace-corner-actions${activeRelPath?.toLowerCase().endsWith(".md") && !imageRelPath ? " has-stats-bar" : ""}`}
-          role="toolbar"
-          aria-label="Help and settings"
-        >
-          {!overlayOpen ? <FileNotesDock /> : null}
-          {activeRelPath?.toLowerCase().endsWith(".md") ? (
-            <button
-              type="button"
-              className={`workspace-corner-btn${sourceMode ? " is-active" : ""}`}
-              title={sourceMode ? "Rich text view" : "View markdown source"}
-              aria-label={sourceMode ? "Rich text view" : "View markdown source"}
-              aria-pressed={sourceMode}
-              onClick={toggleSourceMode}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <polyline points="16 18 22 12 16 6" />
-                <polyline points="8 6 2 12 8 18" />
-              </svg>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="workspace-corner-btn"
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts"
-            onClick={() => openShortcuts()}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="2" y="6" width="20" height="12" rx="2" />
-              <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01" />
-              <path d="M8 14h8" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="workspace-corner-btn"
-            aria-label="Settings"
-            title="Settings (⌘,)"
-            onClick={() => openSettings()}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
-        </div>
-        <div
           className={`workspace-main${overlayOpen ? " hidden" : ""}`}
           id="workspace-main"
         >
@@ -234,15 +154,60 @@ export default function App() {
                 )}
               </EditorErrorBoundary>
             </div>
-            {activeRelPath?.toLowerCase().endsWith(".md") && !imageRelPath ? (
-              <div className="editor-stats-bar">
-                <span>{docStats.chars.toLocaleString()} characters</span>
-                <span className="editor-stats-sep">·</span>
-                <span>{docStats.words.toLocaleString()} words</span>
-                <span className="editor-stats-sep">·</span>
-                <span>{docStats.minutes} min read</span>
+            <div className="editor-bottom-bar">
+              {activeRelPath?.toLowerCase().endsWith(".md") && !imageRelPath ? (
+                <div className="editor-stats">
+                  <span>{docStats.chars.toLocaleString()} characters</span>
+                  <span className="editor-stats-sep">·</span>
+                  <span>{docStats.words.toLocaleString()} words</span>
+                  <span className="editor-stats-sep">·</span>
+                  <span>{docStats.minutes} min read</span>
+                </div>
+              ) : <div />}
+              <div className="editor-bottom-actions" role="toolbar" aria-label="Help and settings">
+                {!overlayOpen ? <FileNotesDock /> : null}
+                {activeRelPath?.toLowerCase().endsWith(".md") ? (
+                  <button
+                    type="button"
+                    className={`workspace-corner-btn${sourceMode ? " is-active" : ""}`}
+                    title={sourceMode ? "Rich text view" : "View markdown source"}
+                    aria-label={sourceMode ? "Rich text view" : "View markdown source"}
+                    aria-pressed={sourceMode}
+                    onClick={toggleSourceMode}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="16 18 22 12 16 6" />
+                      <polyline points="8 6 2 12 8 18" />
+                    </svg>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="workspace-corner-btn"
+                  aria-label="Keyboard shortcuts"
+                  title="Keyboard shortcuts"
+                  onClick={() => openShortcuts()}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="2" y="6" width="20" height="12" rx="2" />
+                    <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01" />
+                    <path d="M8 14h8" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="workspace-corner-btn"
+                  aria-label="Settings"
+                  title="Settings (⌘,)"
+                  onClick={() => openSettings()}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
               </div>
-            ) : null}
+            </div>
           </section>
           <ChatPanel />
         </div>

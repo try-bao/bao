@@ -89,7 +89,7 @@ export function Sidebar() {
       >
         <div className="sidebar-topbar">
           <div className="sidebar-brand">
-            <img src="/logo.png" alt="Bao" className="sidebar-brand-logo" draggable={false} />
+            <img src="./logo.png" alt="Bao" className="sidebar-brand-logo" draggable={false} />
             <span className="sidebar-brand-text">BAO</span>
           </div>
           <div className="sidebar-mode-btns">

@@ -747,18 +747,36 @@ mark.search-highlight {
   min-height: 0;
 }
 
-.workspace-corner-actions {
-  position: absolute;
-  z-index: 9;
-  bottom: 0.65rem;
-  right: 0.65rem;
+.editor-bottom-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.65rem 0.25rem 1.25rem;
+  background: var(--bg-editor);
+  border-top: 1px solid var(--border);
+  min-height: 1.6rem;
+}
+
+.editor-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  opacity: 0.85;
+  user-select: none;
+}
+
+.editor-stats-sep {
+  opacity: 0.5;
+}
+
+.editor-bottom-actions {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-}
-
-.workspace-corner-actions.has-stats-bar {
-  bottom: 2.1rem;
 }
 
 .workspace-corner-btn {
@@ -1726,25 +1744,6 @@ mark.search-highlight {
   align-items: center;
   background: var(--bg-editor);
   overflow: auto;
-}
-
-.editor-stats-bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.25rem 1.25rem;
-  background: var(--bg-editor);
-  border-top: 1px solid var(--border);
-  font-size: 0.65rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  opacity: 0.85;
-  user-select: none;
-}
-
-.editor-stats-sep {
-  opacity: 0.5;
 }
 
 .editor-empty-state {
