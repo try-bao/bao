@@ -1,0 +1,16 @@
+@import "./tokens.css";
+@import "tailwindcss";
+@import "../styles.css";
+
+/* #root must fill the viewport so .app flex layout uses the full window */
+#root {
+  height: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#root > .app {
+  flex: 1;
+  min-height: 0;
+}
