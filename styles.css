@@ -757,6 +757,10 @@ mark.search-highlight {
   gap: 0.35rem;
 }
 
+.workspace-corner-actions.has-stats-bar {
+  bottom: 2.1rem;
+}
+
 .workspace-corner-btn {
   position: relative;
   display: inline-flex;
@@ -1724,6 +1728,25 @@ mark.search-highlight {
   overflow: auto;
 }
 
+.editor-stats-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 1.25rem;
+  background: var(--bg-editor);
+  border-top: 1px solid var(--border);
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  opacity: 0.85;
+  user-select: none;
+}
+
+.editor-stats-sep {
+  opacity: 0.5;
+}
+
 .editor-empty-state {
   flex: 1;
   align-self: stretch;
@@ -1960,7 +1983,8 @@ mark.search-highlight {
 }
 
 .editor-root .md-live a {
-  color: var(--accent);
+  color: #2563eb;
+  text-decoration: underline;
 }
 
 .editor-root .md-live .md-inline-editing {
@@ -2360,6 +2384,19 @@ mark.search-highlight {
   z-index: 20;
 }
 
+.selection-toolbar-t-wrap.is-active {
+  background: var(--accent);
+}
+
+.selection-toolbar-t-wrap.is-active .selection-toolbar-t-icon {
+  color: var(--accent-fg, #fff);
+}
+
+.selection-toolbar-t-wrap.is-active:hover {
+  background: var(--accent);
+  opacity: 0.85;
+}
+
 .selection-toolbar-t-btn {
   display: inline-flex;
   align-items: center;
@@ -2423,6 +2460,17 @@ mark.search-highlight {
 .selection-toolbar-block-menu-item:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+.selection-toolbar-block-menu-item.is-active {
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+}
+
+.selection-toolbar-block-menu-item.is-active:hover {
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  opacity: 0.85;
 }
 
 .selection-toolbar-bold-char {

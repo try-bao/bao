@@ -120,12 +120,15 @@ function closestTag(
   return null;
 }
 
+export type BlockTag = "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "blockquote" | null;
+
 export interface ActiveFormats {
   bold: boolean;
   italic: boolean;
   strikethrough: boolean;
   code: boolean;
   link: boolean;
+  blockTag: BlockTag;
 }
 
 /** Detect which inline formats are active for the current selection. */
@@ -136,12 +139,31 @@ export function detectActiveFormats(live: HTMLElement): ActiveFormats {
     strikethrough: false,
     code: false,
     link: false,
+    blockTag: null,
   };
   const sel = window.getSelection();
   if (!sel?.rangeCount || !live.contains(sel.anchorNode)) {
     return result;
   }
-  result.bold = document.queryCommandState("bold");
+  // Detect enclosing block element
+  const blockTags: BlockTag[] = ["h1", "h2", "h3", "h4", "h5", "h6", "blockquote"];
+  let detectedBlock: BlockTag = "p";
+  for (const bt of blockTags) {
+    if (closestTag(sel.anchorNode, bt, live) !== null) {
+      detectedBlock = bt;
+      break;
+    }
+  }
+  result.blockTag = detectedBlock;
+  const boldCmd = document.queryCommandState("bold");
+  if (boldCmd) {
+    // Headings are inherently bold; only report bold=true if there is an
+    // explicit <b> or <strong> wrapper around the selection.
+    const hasExplicitBold =
+      closestTag(sel.anchorNode, "b", live) !== null ||
+      closestTag(sel.anchorNode, "strong", live) !== null;
+    result.bold = hasExplicitBold;
+  }
   result.italic = document.queryCommandState("italic");
   result.strikethrough = document.queryCommandState("strikeThrough");
   result.code = closestTag(sel.anchorNode, "code", live) !== null;

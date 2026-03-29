@@ -228,7 +228,7 @@
 
   function isHrLine(line) {
     const t = line.trim();
-    return /^(?:-\s*){3,}$/.test(t) || /^(?:\*\s*){3,}$/.test(t) || /^(?:_\s*){3,}$/.test(t);
+    return /^(?:-\s*){3,}$/.test(t) || /^(?:_\s*){3,}$/.test(t);
   }
 
   function isTableDivider(line) {

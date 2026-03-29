@@ -22,6 +22,7 @@ import {
   restoreRange,
   toggleInlineCode,
   type ActiveFormats,
+  type BlockTag,
 } from "../lib/formatSelection";
 import { normalizeVaultImagesInPlace } from "../lib/vaultImageUrls";
 import { useAppStore } from "../store/useAppStore";
@@ -36,6 +37,17 @@ const BLOCK_STYLE_OPTIONS: { value: string; label: string }[] = [
   { value: "h6", label: "Heading 6" },
   { value: "blockquote", label: "Quote" },
 ];
+
+const BLOCK_TAG_SHORT_LABEL: Record<NonNullable<BlockTag>, string> = {
+  p: "T",
+  h1: "H1",
+  h2: "H2",
+  h3: "H3",
+  h4: "H4",
+  h5: "H5",
+  h6: "H6",
+  blockquote: "Q",
+};
 
 type Pos = { top: number; left: number; placeAbove: boolean };
 
@@ -143,6 +155,7 @@ export function SelectionStyleToolbar() {
     strikethrough: false,
     code: false,
     link: false,
+    blockTag: null,
   });
 
   const refreshFromSelection = useCallback(() => {
@@ -385,7 +398,7 @@ export function SelectionStyleToolbar() {
     >
       <div className="selection-toolbar-row selection-toolbar-row--segmented">
         <div
-          className={`selection-toolbar-t-wrap${blockStyleMenuOpen ? " is-open" : ""}`}
+          className={`selection-toolbar-t-wrap${blockStyleMenuOpen ? " is-open" : ""}${activeFormats.blockTag && activeFormats.blockTag !== "p" ? " is-active" : ""}`}
         >
           <button
             ref={tButtonRef}
@@ -403,7 +416,7 @@ export function SelectionStyleToolbar() {
             }}
           >
             <span className="selection-toolbar-t-icon" aria-hidden>
-              T
+              {BLOCK_TAG_SHORT_LABEL[activeFormats.blockTag ?? "p"]}
             </span>
           </button>
           {blockStyleMenuOpen ? (
@@ -420,7 +433,7 @@ export function SelectionStyleToolbar() {
                   key={opt.value}
                   type="button"
                   role="menuitem"
-                  className="selection-toolbar-block-menu-item"
+                  className={`selection-toolbar-block-menu-item${activeFormats.blockTag === opt.value ? " is-active" : ""}`}
                   onClick={() => {
                     runWithRestoredRange(() => applyFormatBlock(opt.value));
                     setBlockStyleMenuOpen(false);

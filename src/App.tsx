@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useAppStore } from "./store/useAppStore";
 import * as note from "./lib/noteUtils";
 import { Sidebar } from "./components/Sidebar";
@@ -99,6 +99,19 @@ export default function App() {
 
   const overlayOpen = settingsOpen || shortcutsOpen;
 
+  const activeBuffer = useAppStore((s) => {
+    const t = s.tabs.find((x) => x.id === s.activeTabId);
+    return t?.buffer ?? "";
+  });
+
+  const docStats = useMemo(() => {
+    const text = activeBuffer;
+    const chars = text.length;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const minutes = Math.max(1, Math.ceil(words / 200));
+    return { chars, words, minutes };
+  }, [activeBuffer]);
+
   const imageRelPath =
     activeRelPath && note.isImageRelPath(activeRelPath)
       ? activeRelPath
@@ -112,7 +125,7 @@ export default function App() {
       <Sidebar />
       <div className="workspace" id="workspace">
         <div
-          className="workspace-corner-actions"
+          className={`workspace-corner-actions${activeRelPath?.toLowerCase().endsWith(".md") && !imageRelPath ? " has-stats-bar" : ""}`}
           role="toolbar"
           aria-label="Help and settings"
         >
@@ -221,6 +234,15 @@ export default function App() {
                 )}
               </EditorErrorBoundary>
             </div>
+            {activeRelPath?.toLowerCase().endsWith(".md") && !imageRelPath ? (
+              <div className="editor-stats-bar">
+                <span>{docStats.chars.toLocaleString()} characters</span>
+                <span className="editor-stats-sep">·</span>
+                <span>{docStats.words.toLocaleString()} words</span>
+                <span className="editor-stats-sep">·</span>
+                <span>{docStats.minutes} min read</span>
+              </div>
+            ) : null}
           </section>
           <ChatPanel />
         </div>

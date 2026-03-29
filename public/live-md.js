@@ -364,7 +364,7 @@
 
   function isHrLineText(t) {
     const s = t.trim();
-    return /^(?:-\s*){3,}$/.test(s) || /^(?:\*\s*){3,}$/.test(s) || /^(?:_\s*){3,}$/.test(s);
+    return /^(?:-\s*){3,}$/.test(s) || /^(?:_\s*){3,}$/.test(s);
   }
 
   function convertHorizontalRules(root) {
@@ -1501,38 +1501,9 @@
   window.wireLiveMarkdown = function (el, onChange) {
     el.setAttribute("spellcheck", "false");
 
-    /** Second `*` while waiting → **bold**; timeout → *italic*; other key → italic then that key. */
-    var starWrapPendingRange = null;
-    var starWrapTimer = null;
-
-    function clearStarWrapPending(applyItalic) {
-      if (starWrapTimer) {
-        clearTimeout(starWrapTimer);
-        starWrapTimer = null;
-      }
-      if (!starWrapPendingRange) {
-        return;
-      }
-      var r = starWrapPendingRange;
-      starWrapPendingRange = null;
-      if (applyItalic) {
-        var sel2 = window.getSelection();
-        if (!sel2) {
-          return;
-        }
-        var rc = r.cloneRange();
-        sel2.removeAllRanges();
-        sel2.addRange(rc);
-        wrapSelectionWithDelimiters(rc, sel2, "*", "*");
-        runMarkdownPipeline();
-        onChange();
-      }
-    }
-
     el.addEventListener(
       "blur",
       function () {
-        clearStarWrapPending(false);
         // Exit all inline edits when editor loses focus
         if (exitInlineEdits()) {
           requestAnimationFrame(function () {
@@ -1554,9 +1525,6 @@
         ) {
           e.stopPropagation();
         }
-        if (starWrapPendingRange) {
-          clearStarWrapPending(false);
-        }
         // Exit inline edits when clicking outside them
         if (!(t instanceof Element) || !t.closest("[data-md-editing]")) {
           if (exitInlineEdits()) {
@@ -1569,7 +1537,7 @@
       true
     );
 
-    /** Selection + `` ` ``, `-`, `*` / `**`, or Alt+* (bold immediately). */
+    /** Selection + trigger key → wrap selection with matching delimiters. */
     el.addEventListener(
       "keydown",
       function (e) {
@@ -1588,75 +1556,23 @@
           return;
         }
 
-        if (starWrapPendingRange && e.key === "Escape") {
-          clearStarWrapPending(false);
-          return;
-        }
-
-        if (starWrapPendingRange && e.key !== "*") {
-          clearTimeout(starWrapTimer);
-          starWrapTimer = null;
-          clearStarWrapPending(true);
-          return;
-        }
-
-        if (e.key === "`" && !e.ctrlKey && !e.metaKey) {
+        var wrapPairs = {
+          "`": ["`", "`"],
+          "*": ["*", "*"],
+          _: ["_", "_"],
+          "(": ["(", ")"],
+          "[": ["[", "]"],
+          "{": ["{", "}"],
+          '"': ['"', '"'],
+          "'": ["'", "'"],
+          "-": ["- ", ""],
+        };
+        var pair = wrapPairs[e.key];
+        if (pair && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
-          wrapSelectionWithDelimiters(range, sel, "`", "`");
+          wrapSelectionWithDelimiters(range, sel, pair[0], pair[1]);
           runMarkdownPipeline();
           onChange();
-          return;
-        }
-        if (e.key === "-" && !e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          wrapSelectionWithDelimiters(range, sel, "- ", "");
-          runMarkdownPipeline();
-          onChange();
-          return;
-        }
-        if (e.key === "*") {
-          if (e.altKey) {
-            e.preventDefault();
-            clearStarWrapPending(false);
-            wrapSelectionWithDelimiters(range, sel, "**", "**");
-            runMarkdownPipeline();
-            onChange();
-            return;
-          }
-          if (starWrapPendingRange) {
-            e.preventDefault();
-            clearTimeout(starWrapTimer);
-            starWrapTimer = null;
-            var rBold = starWrapPendingRange;
-            starWrapPendingRange = null;
-            var rb = rBold.cloneRange();
-            sel.removeAllRanges();
-            sel.addRange(rb);
-            wrapSelectionWithDelimiters(rb, sel, "**", "**");
-            runMarkdownPipeline();
-            onChange();
-            return;
-          }
-          e.preventDefault();
-          starWrapPendingRange = range.cloneRange();
-          starWrapTimer = setTimeout(function () {
-            starWrapTimer = null;
-            if (!starWrapPendingRange) {
-              return;
-            }
-            var rIt = starWrapPendingRange;
-            starWrapPendingRange = null;
-            var s3 = window.getSelection();
-            if (!s3) {
-              return;
-            }
-            var ri = rIt.cloneRange();
-            s3.removeAllRanges();
-            s3.addRange(ri);
-            wrapSelectionWithDelimiters(ri, s3, "*", "*");
-            runMarkdownPipeline();
-            onChange();
-          }, 380);
           return;
         }
       },
@@ -2200,85 +2116,102 @@
           return;
         }
 
-        if (!sel.isCollapsed && e.data === "**") {
-          e.preventDefault();
-          var rw = range.cloneRange();
-          sel.removeAllRanges();
-          sel.addRange(rw);
-          wrapSelectionWithDelimiters(rw, sel, "**", "**");
-          runMarkdownPipeline();
-          onChange();
-          return;
-        }
-
         if (!sel.isCollapsed) {
           return;
         }
 
         const sc = range.startContainer;
-        if (sc.nodeType !== 3) {
-          return;
+        var textNode, offset;
+        if (sc.nodeType === 3) {
+          textNode = sc;
+          offset = range.startOffset;
+        } else {
+          /* Cursor is inside an element (e.g. empty <div>); create a text node so we can pair. */
+          textNode = document.createTextNode("");
+          if (sc.childNodes.length === 0) {
+            sc.appendChild(textNode);
+          } else if (range.startOffset < sc.childNodes.length) {
+            sc.insertBefore(textNode, sc.childNodes[range.startOffset]);
+          } else {
+            sc.appendChild(textNode);
+          }
+          offset = 0;
+          range.setStart(textNode, 0);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
         }
-        const offset = range.startOffset;
-        const full = sc.textContent || "";
+        const full = textNode.textContent || "";
         const before = full.slice(0, offset);
         const after = full.slice(offset);
 
-        if (e.data === "`") {
-          const trail = countTrailingChar(before, "`");
-          if (trail === 0) {
+        /* --- Auto-pair: symmetric pairs (quotes / symbols) --- */
+        var symmetricPairs = { "`": "`", "*": "*", _: "_", '"': '"', "'": "'" };
+        var symClose = symmetricPairs[e.data];
+        if (symClose) {
+          /* Special case: ``` code fence from three consecutive backticks */
+          if (e.data === "`") {
+            var btTrail = countTrailingChar(before, "`");
+            if (btTrail === 2) {
+              e.preventDefault();
+              var nb = before.slice(0, -2);
+              var ins = "```\n\n```";
+              textNode.textContent = nb + ins + after;
+              var caret = nb.length + 4;
+              range.setStart(textNode, caret);
+              range.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(range);
+              runMarkdownPipeline();
+              return;
+            }
+          }
+          /* Skip over existing closing char */
+          if (after.length > 0 && after[0] === symClose) {
             e.preventDefault();
-            sc.textContent = before + "``" + after;
-            range.setStart(sc, offset + 1);
+            range.setStart(textNode, offset + 1);
             range.collapse(true);
             sel.removeAllRanges();
             sel.addRange(range);
-            runMarkdownPipeline();
             return;
           }
-          if (trail === 2) {
-            e.preventDefault();
-            const nb = before.slice(0, -2);
-            const ins = "```\n\n```";
-            sc.textContent = nb + ins + after;
-            const caret = nb.length + 4;
-            range.setStart(sc, caret);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            runMarkdownPipeline();
+          /* Don't auto-pair * or _ right after list markers */
+          if ((e.data === "*" || e.data === "_") && !canAutoPairAsterisk(before)) {
             return;
           }
+          e.preventDefault();
+          textNode.textContent = before + e.data + symClose + after;
+          range.setStart(textNode, offset + 1);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          runMarkdownPipeline();
           return;
         }
 
-        if (e.data === "*" && canAutoPairAsterisk(before)) {
-          const trail = countTrailingChar(before, "*");
-          /* Skip over existing closing * instead of auto-pairing again
-             (e.g. **hallo|** → type * → **hallo*|* instead of **hallo******) */
-          if (trail < 2 && after.length > 0 && after[0] === "*") {
-            e.preventDefault();
-            range.setStart(sc, offset + 1);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            runMarkdownPipeline();
-            return;
-          }
-          if (trail >= 2) {
-            return;
-          }
-          if (trail === 0) {
-            e.preventDefault();
-            /* ** + ** with caret between pairs so typing produces **word**, not *word* (italic). */
-            sc.textContent = before + "****" + after;
-            range.setStart(sc, offset + 2);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            runMarkdownPipeline();
-            return;
-          }
+        /* --- Auto-pair: bracket pairs --- */
+        var bracketPairs = { "(": ")", "[": "]", "{": "}" };
+        var bracketClose = bracketPairs[e.data];
+        if (bracketClose) {
+          e.preventDefault();
+          textNode.textContent = before + e.data + bracketClose + after;
+          range.setStart(textNode, offset + 1);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          runMarkdownPipeline();
+          return;
+        }
+
+        /* --- Skip over closing bracket --- */
+        var closingBrackets = { ")": true, "]": true, "}": true };
+        if (closingBrackets[e.data] && after.length > 0 && after[0] === e.data) {
+          e.preventDefault();
+          range.setStart(textNode, offset + 1);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          return;
         }
       },
       true
@@ -2323,6 +2256,35 @@
         try {
           const md = window.pasteHtmlToMarkdown(html);
           if (md && md.replace(/\s/g, "").length > 0) {
+            const noteRelForImages = el.dataset.baoNoteRelPath;
+            if (noteRelForImages && /!\[[^\]]*\]\(https?:\/\//.test(md)) {
+              downloadRemoteImagesInMarkdown(md, noteRelForImages)
+                .then(function (localMd) {
+                  var rendered = window.parseMarkdownToHtml(localMd);
+                  if (
+                    rendered &&
+                    typeof document.queryCommandSupported === "function" &&
+                    document.queryCommandSupported("insertHTML")
+                  ) {
+                    el.focus();
+                    document.execCommand("insertHTML", false, rendered);
+                  }
+                  convertFencedCodeBlocks(el);
+                  convertHorizontalRules(el);
+                  convertBlockquotes(el);
+                  convertTaskLists(el);
+                  convertOrderedLists(el);
+                  convertBulletLists(el);
+                  convertAtxHeadings(el);
+                  applyInlineMarkers(el);
+                  onChange();
+                  dispatchVaultFilesChanged();
+                })
+                .catch(function (err) {
+                  console.error("bao: remote image download failed", err);
+                });
+              return;
+            }
             const rendered = window.parseMarkdownToHtml(md);
             if (
               rendered &&
@@ -2432,6 +2394,27 @@
         try {
           const md = window.pasteHtmlToMarkdown(html);
           if (md && md.replace(/\s/g, "").length > 0) {
+            const noteRelForImages = el.dataset.baoNoteRelPath;
+            if (noteRelForImages && /!\[[^\]]*\]\(https?:\/\//.test(md)) {
+              downloadRemoteImagesInMarkdown(md, noteRelForImages)
+                .then(function (localMd) {
+                  var rendered = window.parseMarkdownToHtml(localMd);
+                  if (
+                    rendered &&
+                    typeof document.queryCommandSupported === "function" &&
+                    document.queryCommandSupported("insertHTML")
+                  ) {
+                    el.focus();
+                    document.execCommand("insertHTML", false, rendered);
+                  }
+                  runMarkdownPipeline();
+                  dispatchVaultFilesChanged();
+                })
+                .catch(function (err) {
+                  console.error("bao: remote image download failed", err);
+                });
+              return;
+            }
             const rendered = window.parseMarkdownToHtml(md);
             if (
               rendered &&
