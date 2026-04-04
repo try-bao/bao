@@ -103,6 +103,10 @@ export interface BaoApi {
   consumePendingTabDrag: (
     insertIndex: number
   ) => Promise<ConsumePendingTabDragResult>;
+  exportPdf: (
+    html: string,
+    suggestedName: string
+  ) => Promise<{ saved: boolean; filePath?: string }>;
   getPathForFile: (file: File) => string | undefined;
 }
 
@@ -126,7 +130,7 @@ export interface ContextRenameTarget {
   name: string;
 }
 
-export type ModalMode = "file" | "folder" | "rename";
+export type ModalMode = "file" | "folder" | "rename" | "save-scratch";
 
 export interface EditorBridge {
   getMarkdown: () => string;

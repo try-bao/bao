@@ -86,5 +86,7 @@ contextBridge.exposeInMainWorld("bao", {
   notifyTabDragEnd: () => ipcRenderer.send("bao:tab-drag-end"),
   consumePendingTabDrag: (insertIndex) =>
     ipcRenderer.invoke("bao:consume-pending-tab-drag", { insertIndex }),
+  exportPdf: (html, suggestedName) =>
+    ipcRenderer.invoke("bao:export-pdf", { html, suggestedName }),
   getPathForFile: pathForFile,
 });

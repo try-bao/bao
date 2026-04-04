@@ -83,6 +83,8 @@ export default function App() {
     }
     void (async () => {
       try {
+        await useAppStore.getState().loadVaultPath();
+        await useAppStore.getState().refreshTree();
         await useAppStore.getState().tryOpenFile(path);
       } catch {
         /* tryOpenFile already alerts on failure */
@@ -136,7 +138,7 @@ export default function App() {
         >
           <section className="editor-panel">
             <TabBar />
-            {activeRelPath ? (
+            {activeRelPath && !note.isScratchPath(activeRelPath) ? (
               <div className="editor-path-bar" title={activeRelPath}>
                 <p className="editor-path-bar__text">
                   {activeRelPath}
@@ -148,6 +150,13 @@ export default function App() {
                       </time>)
                     </span>
                   ) : null}
+                </p>
+              </div>
+            ) : null}
+            {activeRelPath && note.isScratchPath(activeRelPath) ? (
+              <div className="editor-path-bar editor-path-bar--scratch">
+                <p className="editor-path-bar__text editor-path-bar__text--scratch">
+                  Unsaved file — data will be lost if not saved
                 </p>
               </div>
             ) : null}

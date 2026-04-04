@@ -201,9 +201,8 @@ function MarkdownEditorActive() {
         if (liveNow) {
           const st = useAppStore.getState();
           const tab = st.tabs.find((t) => t.id === st.activeTabId);
-          if (tab?.relPath?.toLowerCase().endsWith(".md")) {
+          if (tab?.relPath?.toLowerCase().endsWith(".md") && !note.isScratchPath(tab.relPath)) {
             const hasTitleNow = note.titleFromMarkdown(tab.buffer);
-            console.log("[bao] heading check:", JSON.stringify({ buffer: tab.buffer.slice(0, 120), hasTitleNow }));
             if (!hasTitleNow) {
               // Re-read buffer after onEditorInput stored it
               const currentMd = tab.buffer;
@@ -442,6 +441,7 @@ function TitleTagPopover({ live }: { live: HTMLElement | null }) {
       const next = tagCore.setTagsForFile(idx, activeRelPath, nextTags);
       await getApi().setTagIndex(next);
       setNoteTags(tagCore.tagsForFile(next, activeRelPath));
+      useAppStore.getState().bumpTagIndexRevision();
     },
     [activeRelPath],
   );

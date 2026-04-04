@@ -3,6 +3,11 @@ import type { EditorTab, TreeSelection } from "../types";
 /** Vault-relative paths that can open as an editor tab (markdown, HTML, or image preview). */
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i;
 const HTML_EXT_RE = /\.html?$/i;
+const SCRATCH_PREFIX = ".bao/.scratch-";
+
+export function isScratchPath(relPath: string): boolean {
+  return relPath.startsWith(SCRATCH_PREFIX);
+}
 
 export function isImageRelPath(relPath: string): boolean {
   return IMAGE_EXT_RE.test(relPath);
@@ -91,6 +96,10 @@ export function editorDisplayTitle(
   if (!relPath) {
     return "No file open";
   }
+  if (isScratchPath(relPath)) {
+    const heading = titleFromMarkdown(content);
+    return heading || "Untitled";
+  }
   if (!relPath.toLowerCase().endsWith(".md")) {
     return relPath.split("/").pop() || relPath;
   }
@@ -98,7 +107,7 @@ export function editorDisplayTitle(
   if (heading) {
     return heading;
   }
-  return "Untitled";
+  return relPath.split("/").pop()?.replace(/\.md$/i, "") || relPath;
 }
 
 export function noteContentWithCopyHeading(
@@ -117,6 +126,9 @@ export function noteContentWithCopyHeading(
 export function isTabDirty(tab: EditorTab): boolean {
   if (tab.relPath && isImageRelPath(tab.relPath)) {
     return false;
+  }
+  if (tab.relPath && isScratchPath(tab.relPath)) {
+    return true;
   }
   return tab.buffer !== tab.lastSavedContent;
 }

@@ -1,6 +1,7 @@
 import { createWithEqualityFn } from "zustand/traditional";
 import { getApi } from "../lib/api";
 import * as note from "../lib/noteUtils";
+import { formatErr } from "../lib/formatErr";
 import {
   copyFileNotesSidecar,
   deleteAllFileNotesSidecarsForMd,
@@ -153,6 +154,7 @@ interface AppState {
     insertIndex: number;
   }) => Promise<void>;
   closeTab: (tabId: string, opts?: { skipDirtyCheck?: boolean }) => void;
+  openUntitledTab: () => Promise<void>;
   openNewTabModal: () => void;
   openModalFile: (forcedParent?: string) => void;
   openModalFolder: (forcedParent?: string) => void;
@@ -193,6 +195,8 @@ interface AppState {
 
   fileNotesByPath: Record<string, FileNoteEntry[]>;
   fileNotesRevision: number;
+  tagIndexRevision: number;
+  bumpTagIndexRevision: () => void;
   loadFileNotesForPath: (relPath: string) => Promise<void>;
   addFileNote: (
     relPath: string,
@@ -210,16 +214,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
   editorBridge: null,
   setEditorBridge: (b) => set({ editorBridge: b }),
 
-  tabs: [
-    {
-      id: initialTabId,
-      relPath: null,
-      buffer: "",
-      lastSavedContent: "",
-      fileMtimeMs: null,
-    },
-  ],
-  activeTabId: initialTabId,
+  tabs: [],
+  activeTabId: null as string | null,
   expanded: {},
   selection: null,
   multiSelection: [],
@@ -260,6 +256,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
 
   fileNotesByPath: {},
   fileNotesRevision: 0,
+  tagIndexRevision: 0,
+  bumpTagIndexRevision: () => set((s) => ({ tagIndexRevision: s.tagIndexRevision + 1 })),
 
   loadFileNotesForPath: async (relPath) => {
     if (!relPath.toLowerCase().endsWith(".md")) {
@@ -420,9 +418,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
     try {
       await api.openFileInNewWindow(t.relPath);
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Could not open a new window."
-      );
+      console.error(err);
+      window.alert(formatErr("Could not open a new window.", err));
       return;
     }
     get().closeTab(tabId, { skipDirtyCheck: true });
@@ -563,20 +560,21 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
     }
     const s1 = get();
     if (s1.tabs.length === 1) {
-      const cleared = {
-        ...tAfterFlush,
-        relPath: null,
-        buffer: "",
-        lastSavedContent: "",
-        fileMtimeMs: null,
-      };
+      // Clean up scratch file if present
+      if (tAfterFlush.relPath && note.isScratchPath(tAfterFlush.relPath)) {
+        getApi().deleteItem(tAfterFlush.relPath).catch(() => {});
+      }
       set({
-        tabs: [cleared],
-        activeTabId: cleared.id,
+        tabs: [],
+        activeTabId: null,
       });
       get().editorBridge?.setMarkdown("", { silent: true });
       get().editorBridge?.setDisabled(true);
       return;
+    }
+    // Clean up scratch file if present
+    if (tAfterFlush.relPath && note.isScratchPath(tAfterFlush.relPath)) {
+      getApi().deleteItem(tAfterFlush.relPath).catch(() => {});
     }
     const idx = s1.tabs.findIndex((t) => t.id === tabId);
     const nextTabs = s1.tabs.filter((t) => t.id !== tabId);
@@ -601,6 +599,27 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
         newItemParent: note.parentRel(nextTab.relPath),
       });
     }
+  },
+
+  openUntitledTab: async () => {
+    const api = getApi();
+    get().flushActiveBuffer();
+    const id = newTabId();
+    const scratchRel = `.bao/.scratch-${id}.md`;
+    try {
+      await api.writeFile(scratchRel, "");
+    } catch (err) {
+      window.alert("Could not create scratch file.");
+      return;
+    }
+    const mtime = await getFileMtimeMsSafe(scratchRel);
+    const s = get();
+    set({
+      tabs: [...s.tabs, { id, relPath: scratchRel, buffer: "", lastSavedContent: "", fileMtimeMs: mtime }],
+      activeTabId: id,
+    });
+    get().editorBridge?.setMarkdown("", { silent: true });
+    get().editorBridge?.setDisabled(false);
   },
 
   openNewTabModal: () => {
@@ -718,6 +737,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       try {
         const { newRelPath } = await api.renameItem(m.renameFromRel, name);
         await syncTagIndexRename(m.renameFromRel, newRelPath);
+        get().bumpTagIndexRevision();
         await renameFileNotesSidecar(api, m.renameFromRel, newRelPath);
         set((st) => ({
           tabs: note.remapOpenTabsAfterMove(
@@ -740,15 +760,53 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
         get().closeModal();
         await get().refreshTree();
       } catch (err) {
-        window.alert(
-          err instanceof Error ? err.message : "Could not rename."
-        );
+        console.error(err);
+        window.alert(formatErr("Could not rename.", err));
       }
       return;
     }
 
     if (!name || !m.mode) {
       get().closeModal();
+      return;
+    }
+
+    if (m.mode === "save-scratch") {
+      const scratchRel = m.renameFromRel;
+      if (!scratchRel) {
+        get().closeModal();
+        return;
+      }
+      const parent =
+        m.forcedParent !== undefined ? m.forcedParent : s.newItemParent;
+      const fileName = note.mdFileName(name);
+      const relPath = parent ? `${parent}/${fileName}` : fileName;
+      try {
+        const exists = await api.pathExists(relPath);
+        if (exists) {
+          window.alert(`A file named "${fileName}" already exists in this location.`);
+          return;
+        }
+        const tab = s.tabs.find((t) => t.relPath === scratchRel);
+        const buffer = tab?.buffer ?? "";
+        await api.writeFile(relPath, buffer);
+        await api.deleteItem(scratchRel).catch(() => {});
+        const mtime = await getFileMtimeMsSafe(relPath);
+        set({
+          tabs: s.tabs.map((t) =>
+            t.relPath === scratchRel
+              ? { ...t, relPath, lastSavedContent: buffer, fileMtimeMs: mtime }
+              : t
+          ),
+          selection: { relPath, isDirectory: false },
+          newItemParent: note.parentRel(relPath),
+        });
+        get().closeModal();
+        await get().refreshTree();
+      } catch (err) {
+        console.error(err);
+        window.alert(formatErr("Could not save file.", err));
+      }
       return;
     }
 
@@ -774,9 +832,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       get().closeModal();
       await get().refreshTree();
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Could not create item."
-      );
+      console.error(err);
+      window.alert(formatErr("Could not create item.", err));
     }
   },
 
@@ -854,9 +911,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
           throw new Error("File does not exist.");
         }
       } catch (err) {
-        window.alert(
-          err instanceof Error ? err.message : "Could not open file."
-        );
+        console.error(err);
+        window.alert(formatErr("Could not open file.", err));
         return;
       }
       const imageMtime = await getFileMtimeMsSafe(relPath);
@@ -964,9 +1020,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       });
       await get().loadFileNotesForPath(relPath);
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Could not open file."
-      );
+      console.error(err);
+      window.alert(formatErr("Could not open file.", err));
     }
   },
 
@@ -978,6 +1033,28 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
     if (!tab?.relPath) {
       return;
     }
+
+    // Scratch tab: open the save modal to let the user pick a filename
+    if (note.isScratchPath(tab.relPath)) {
+      const vaultRoot = s.vaultPathDisplay || "";
+      const parent = s.newItemParent;
+      const absPath = parent ? `${vaultRoot}/${parent}` : vaultRoot;
+      set({
+        modal: {
+          open: true,
+          mode: "save-scratch",
+          title: "Save as",
+          hint: `Saves a Markdown file in: ${absPath}`,
+          defaultValue: "Untitled",
+          confirmLabel: "Save",
+          renameFromRel: tab.relPath,
+          forcedParent: undefined,
+        },
+        modalInputValue: "Untitled",
+      });
+      return;
+    }
+
     if (note.isImageRelPath(tab.relPath)) {
       return;
     }
@@ -1033,9 +1110,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       }));
       await get().refreshTree();
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Could not save file."
-      );
+      console.error(err);
+      window.alert(formatErr("Could not save file.", err));
     }
   },
 
@@ -1072,6 +1148,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
     }
     await api.deleteItem(delPath);
     await syncTagIndexRemove(delPath, target.isDirectory);
+    get().bumpTagIndexRevision();
     for (const t of tabsAffected) {
       get().closeTab(t.id, { skipDirtyCheck: true });
     }
@@ -1132,6 +1209,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       await api.deleteItem(item.relPath);
       await syncTagIndexRemove(item.relPath, item.isDirectory);
     }
+    get().bumpTagIndexRevision();
     for (const t of tabsAffected) {
       get().closeTab(t.id, { skipDirtyCheck: true });
     }
@@ -1207,9 +1285,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
           get().expandAncestors(toParent);
           await get().refreshTree();
         } catch (err) {
-          window.alert(
-            err instanceof Error ? err.message : "Import failed."
-          );
+          console.error(err);
+          window.alert(formatErr("Import failed.", err));
         }
       }
       return;
@@ -1249,6 +1326,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       for (const item of movable) {
         const { newRelPath } = await api.moveItem(item.fromRel, toParent);
         await syncTagIndexRename(item.fromRel, newRelPath);
+        get().bumpTagIndexRevision();
         await renameFileNotesSidecar(api, item.fromRel, newRelPath);
         set((st) => {
           // Remap expanded state for moved folders
@@ -1288,9 +1366,8 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       get().expandAncestors(toParent);
       await get().refreshTree();
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Could not move item."
-      );
+      console.error(err);
+      window.alert(formatErr("Could not move item.", err));
     }
   },
 
@@ -1348,6 +1425,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       multiSelection: [],
       fileNotesByPath: {},
       fileNotesRevision: 0,
+      tagIndexRevision: 0,
       clipboardNoteRelPath: null,
     });
     await get().refreshTree();
@@ -1366,6 +1444,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       multiSelection: [],
       fileNotesByPath: {},
       fileNotesRevision: 0,
+      tagIndexRevision: 0,
       clipboardNoteRelPath: null,
     });
     await get().refreshTree();
@@ -1383,6 +1462,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       multiSelection: [],
       fileNotesByPath: {},
       fileNotesRevision: 0,
+      tagIndexRevision: 0,
       clipboardNoteRelPath: null,
       settingsOpen: false,
       shortcutsOpen: false,

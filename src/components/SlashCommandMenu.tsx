@@ -17,6 +17,7 @@ import {
   type SlashDetection,
 } from "../lib/slashCommand";
 import { getApi } from "../lib/api";
+import { type EmojiEntry, EMOJI_LIST } from "../lib/emojiData";
 import { useAppStore } from "../store/useAppStore";
 
 type Submenu = "main" | "heading" | "emoji";
@@ -44,74 +45,6 @@ const MAIN_ITEMS: Item[] = [
   { id: "quote", label: "Quote", keywords: "quote blockquote" },
   { id: "divider", label: "Divider", keywords: "divider horizontal rule hr" },
   { id: "emoji", label: "Emoji", keywords: "emoji smiley face emoticon" },
-];
-
-type EmojiEntry = { emoji: string; name: string };
-
-const EMOJI_LIST: EmojiEntry[] = [
-  { emoji: "😀", name: "grinning face" },
-  { emoji: "😂", name: "joy tears laughing" },
-  { emoji: "😅", name: "sweat smile nervous" },
-  { emoji: "😊", name: "blush happy" },
-  { emoji: "😍", name: "heart eyes love" },
-  { emoji: "🥰", name: "smiling hearts love" },
-  { emoji: "😎", name: "sunglasses cool" },
-  { emoji: "🤔", name: "thinking think" },
-  { emoji: "😢", name: "cry sad" },
-  { emoji: "😡", name: "angry mad rage" },
-  { emoji: "🥳", name: "party celebrate" },
-  { emoji: "😴", name: "sleeping sleep zzz" },
-  { emoji: "🤯", name: "mind blown exploding" },
-  { emoji: "🫡", name: "salute" },
-  { emoji: "👍", name: "thumbs up yes good" },
-  { emoji: "👎", name: "thumbs down no bad" },
-  { emoji: "👏", name: "clap applause" },
-  { emoji: "🙌", name: "raised hands hooray" },
-  { emoji: "🤝", name: "handshake deal" },
-  { emoji: "✌️", name: "peace victory" },
-  { emoji: "🫶", name: "heart hands love" },
-  { emoji: "💪", name: "muscle strong flex" },
-  { emoji: "🔥", name: "fire hot lit" },
-  { emoji: "⭐", name: "star" },
-  { emoji: "✨", name: "sparkles magic" },
-  { emoji: "💡", name: "light bulb idea" },
-  { emoji: "❤️", name: "red heart love" },
-  { emoji: "💔", name: "broken heart" },
-  { emoji: "💯", name: "hundred perfect" },
-  { emoji: "🎉", name: "party popper tada" },
-  { emoji: "🎯", name: "bullseye target dart" },
-  { emoji: "🚀", name: "rocket launch" },
-  { emoji: "⚡", name: "lightning zap bolt" },
-  { emoji: "🌟", name: "glowing star" },
-  { emoji: "🌈", name: "rainbow" },
-  { emoji: "☀️", name: "sun sunny" },
-  { emoji: "🌙", name: "moon night" },
-  { emoji: "🍕", name: "pizza food" },
-  { emoji: "☕", name: "coffee cup" },
-  { emoji: "🎵", name: "music note" },
-  { emoji: "📌", name: "pin pushpin" },
-  { emoji: "📝", name: "memo note write" },
-  { emoji: "📎", name: "paperclip attach" },
-  { emoji: "📅", name: "calendar date" },
-  { emoji: "✅", name: "check mark done" },
-  { emoji: "❌", name: "cross mark no" },
-  { emoji: "⚠️", name: "warning caution" },
-  { emoji: "❓", name: "question mark" },
-  { emoji: "❗", name: "exclamation alert" },
-  { emoji: "💬", name: "speech bubble chat" },
-  { emoji: "👀", name: "eyes look see" },
-  { emoji: "🐛", name: "bug insect" },
-  { emoji: "🏷️", name: "tag label" },
-  { emoji: "📦", name: "package box" },
-  { emoji: "🔒", name: "lock secure" },
-  { emoji: "🔑", name: "key" },
-  { emoji: "🗑️", name: "trash delete" },
-  { emoji: "💀", name: "skull dead" },
-  { emoji: "👻", name: "ghost" },
-  { emoji: "🤖", name: "robot bot" },
-  { emoji: "🧠", name: "brain smart" },
-  { emoji: "🎨", name: "art palette paint" },
-  { emoji: "🏆", name: "trophy award winner" },
 ];
 
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
@@ -302,6 +235,11 @@ export function SlashCommandMenu({
       }
       if (id === "heading") {
         setSubmenu("heading");
+        setHighlight(0);
+        return;
+      }
+      if (id === "emoji") {
+        setSubmenu("emoji");
         setHighlight(0);
         return;
       }

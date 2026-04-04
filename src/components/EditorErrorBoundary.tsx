@@ -24,7 +24,7 @@ export class EditorErrorBoundary extends Component<Props, State> {
         <div className="editor-error-fallback" role="alert">
           <p className="editor-error-fallback-title">Something went wrong</p>
           <p className="editor-error-fallback-detail">
-            {this.state.error.message || "An error occurred in the editor."}
+            An error occurred in the editor.
           </p>
           <button
             type="button"

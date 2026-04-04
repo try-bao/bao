@@ -976,6 +976,59 @@ app.whenReady().then(() => {
     return true;
   });
 
+  ipcMain.handle("bao:export-pdf", async (event, { html, suggestedName }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const defaultName = String(suggestedName || "export").replace(/\.md$/i, "") + ".pdf";
+    const result = await dialog.showSaveDialog(win, {
+      title: "Export as PDF",
+      defaultPath: defaultName,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    });
+    if (result.canceled || !result.filePath) {
+      return { saved: false };
+    }
+
+    const pdfWin = new BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    const styledHtml = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         max-width: 700px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a; line-height: 1.6; font-size: 14px; }
+  h1 { font-size: 1.8em; margin-top: 0; }
+  h2 { font-size: 1.4em; }
+  h3 { font-size: 1.2em; }
+  pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+  code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-size: 13px; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid #ddd; margin-left: 0; padding-left: 16px; color: #555; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background: #f5f5f5; }
+  img { max-width: 100%; height: auto; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+  ul, ol { padding-left: 24px; }
+  a { color: #0366d6; text-decoration: none; }
+</style></head><body>${html}</body></html>`;
+
+    await pdfWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(styledHtml));
+    const pdfBuffer = await pdfWin.webContents.printToPDF({
+      printBackground: true,
+      margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+    });
+    pdfWin.close();
+
+    fs.writeFileSync(result.filePath, pdfBuffer);
+    return { saved: true, filePath: result.filePath };
+  });
+
   createWindow();
 
   app.on("activate", () => {

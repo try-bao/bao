@@ -121,7 +121,7 @@ export function EditorHeader() {
     [noteTags, persistNoteTags]
   );
 
-  if (!tab || !tab.relPath) {
+  if (!tab || !tab.relPath || note.isScratchPath(tab.relPath)) {
     return null;
   }
 
