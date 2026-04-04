@@ -13,13 +13,16 @@ export function tabStripTitle(t: EditorTab, isActive: boolean): string {
   if (!t.relPath) {
     return note.editorDisplayTitle(null, t.buffer);
   }
+  if (note.isScratchPath(t.relPath)) {
+    return note.editorDisplayTitle(t.relPath, t.buffer);
+  }
   if (!t.relPath.toLowerCase().endsWith(".md")) {
-    return note.tabStemFromRelPath(t.relPath);
+    return t.relPath.split("/").pop() ?? t.relPath;
   }
   if (isActive) {
     return note.editorDisplayTitle(t.relPath, t.buffer);
   }
-  return note.basenameNoMd(t.relPath);
+  return t.relPath.split("/").pop()?.replace(/\.md$/i, "") ?? t.relPath;
 }
 
 export function selectTabStripRows(s: {

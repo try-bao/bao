@@ -7,13 +7,14 @@ import {
   NOTE_MARK_END,
   NOTE_MARK_START,
 } from "../lib/fileNotes";
+import { bodyMarkdownForEditor } from "../lib/noteUtils";
 
 describe("fileNotesSidecarRelPath", () => {
-  it("maps markdown path under .metadata/notes mirroring the file path", () => {
+  it("maps markdown path under .bao/notes mirroring the file path", () => {
     expect(fileNotesSidecarRelPath("a/b/Note.md")).toBe(
-      ".metadata/notes/a/b/Note.md.json"
+      ".bao/notes/a/b/Note.md.json"
     );
-    expect(fileNotesSidecarRelPath("foo.md")).toBe(".metadata/notes/foo.md.json");
+    expect(fileNotesSidecarRelPath("foo.md")).toBe(".bao/notes/foo.md.json");
   });
 });
 
@@ -187,5 +188,54 @@ describe("adjustNoteIndicesForEdit", () => {
     expect(result).not.toBeNull();
     expect(result![0].index).toEqual([7, 12]);
     expect(result![0].resolved).toBe(true);
+  });
+});
+
+describe("note offsets are body-relative (heading excluded)", () => {
+  it("body-relative offsets correctly highlight text from a headed document", () => {
+    const fullMd = "# Title\n\nHello world";
+    const bodyMd = bodyMarkdownForEditor(fullMd);
+    // bodyMd should be the text after the heading line (heading + blank line consumed)
+    expect(bodyMd).toBe("Hello world");
+    // "Hello" is at body positions [0, 5]
+    const notes = [
+      { index: [0, 5] as [number, number], value: "note on Hello", resolved: false },
+    ];
+    const { marked } = injectNoteMarkersInBodyMd(bodyMd, notes);
+    const s = marked.indexOf(NOTE_MARK_START);
+    const e = marked.indexOf(NOTE_MARK_END);
+    expect(s).toBeGreaterThanOrEqual(0);
+    expect(marked.slice(s + 1, e)).toBe("Hello");
+  });
+
+  it("full-markdown offsets would fail to highlight correctly in body-only text", () => {
+    const fullMd = "# Title\n\nHello world";
+    const bodyMd = bodyMarkdownForEditor(fullMd);
+    // "Hello" in the FULL markdown is at position 9 (after "# Title\n\n")
+    // Using full-markdown offsets on the body text would be wrong
+    const notes = [
+      { index: [9, 14] as [number, number], value: "wrong offsets", resolved: false },
+    ];
+    const { marked, noteFileIndices } = injectNoteMarkersInBodyMd(bodyMd, notes);
+    // End index 14 > bodyMd.length (11), so the note should be filtered out
+    expect(noteFileIndices).toHaveLength(0);
+    expect(marked).not.toContain(NOTE_MARK_START);
+  });
+
+  it("body-relative offsets index into the correct text via bodyMarkdownForEditor", () => {
+    const fullMd = "# My Heading\n\nSome **bold** text here";
+    const bodyMd = bodyMarkdownForEditor(fullMd);
+    // "bold" is at body positions — find it
+    const boldStart = bodyMd.indexOf("**bold**");
+    const contentStart = boldStart;
+    const contentEnd = boldStart + "**bold**".length;
+    const notes = [
+      { index: [contentStart, contentEnd] as [number, number], value: "note", resolved: false },
+    ];
+    const { marked, noteFileIndices } = injectNoteMarkersInBodyMd(bodyMd, notes);
+    expect(noteFileIndices).toHaveLength(1);
+    const s = marked.indexOf(NOTE_MARK_START);
+    const e = marked.indexOf(NOTE_MARK_END);
+    expect(marked.slice(s + 1, e)).toBe("**bold**");
   });
 });

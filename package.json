@@ -1,7 +1,7 @@
 {
   "name": "bao",
-  "version": "1.0.0",
-  "description": "The most powerful Markdown editor that you've ever seen.",
+  "version": "1.0.1",
+  "description": "The most minimalistic and powerful Markdown editor that you've ever seen.",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "start": "electron .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pack": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
   },
   "build": {
@@ -28,10 +28,15 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "public/logo_color.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         "dmg",
         "dir"
-      ]
+      ],
+      "notarize": true
     },
     "win": {
       "target": [

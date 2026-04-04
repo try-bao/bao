@@ -284,7 +284,7 @@ export function useGlobalShortcuts() {
           return;
         }
         e.preventDefault();
-        st.openNewTabModal();
+        st.openUntitledTab();
         return;
       }
 

@@ -18,12 +18,13 @@ export function Sidebar() {
   const [tagHighlight, setTagHighlight] = useState(-1);
   const tagInputRef = useRef<HTMLInputElement>(null);
   const tagFilterId = useId();
+  const tagIndexRevision = useAppStore((s) => s.tagIndexRevision);
 
   useEffect(() => {
     loadTagIndex().then((index) => {
       setAllTags(Object.keys(index).sort());
     });
-  }, []);
+  }, [tagIndexRevision]);
 
   const availableTags = allTags.filter((t) => !selectedTags.includes(t));
 

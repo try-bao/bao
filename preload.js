@@ -32,8 +32,13 @@ contextBridge.exposeInMainWorld("bao", {
     return () => ipcRenderer.removeListener(channel, listener);
   },
   getDataDir: () => ipcRenderer.invoke("bao:get-data-dir"),
+  getRecentVaults: () => ipcRenderer.invoke("bao:get-recent-vaults"),
+  openVault: (dir) => ipcRenderer.invoke("bao:open-vault", dir),
+  chooseVaultFolder: () => ipcRenderer.invoke("bao:choose-vault-folder"),
   revealInFileManager: (relPath) =>
     ipcRenderer.invoke("bao:reveal-in-file-manager", relPath),
+  chooseImageFile: () =>
+    ipcRenderer.invoke("bao:choose-image-file"),
   openVaultFile: (relPath) =>
     ipcRenderer.invoke("bao:open-vault-file", relPath),
   openExternalUrl: (url) =>
@@ -58,8 +63,6 @@ contextBridge.exposeInMainWorld("bao", {
     ipcRenderer.invoke("bao:move", fromRel, toParentRel),
   importPaths: (paths, parentRel) =>
     ipcRenderer.invoke("bao:import-paths", paths, parentRel),
-  renameToHeading: (fromRel, headingText) =>
-    ipcRenderer.invoke("bao:rename-to-heading", fromRel, headingText),
   renameItem: (fromRel, newName) =>
     ipcRenderer.invoke("bao:rename-item", fromRel, newName),
   deleteItem: (relPath) => ipcRenderer.invoke("bao:delete-item", relPath),
@@ -83,5 +86,7 @@ contextBridge.exposeInMainWorld("bao", {
   notifyTabDragEnd: () => ipcRenderer.send("bao:tab-drag-end"),
   consumePendingTabDrag: (insertIndex) =>
     ipcRenderer.invoke("bao:consume-pending-tab-drag", { insertIndex }),
+  exportPdf: (html, suggestedName) =>
+    ipcRenderer.invoke("bao:export-pdf", { html, suggestedName }),
   getPathForFile: pathForFile,
 });

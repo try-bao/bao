@@ -16,9 +16,11 @@ import {
   deleteSlashCommandRange,
   type SlashDetection,
 } from "../lib/slashCommand";
+import { getApi } from "../lib/api";
+import { type EmojiEntry, EMOJI_LIST } from "../lib/emojiData";
 import { useAppStore } from "../store/useAppStore";
 
-type Submenu = "main" | "heading";
+type Submenu = "main" | "heading" | "emoji";
 
 type Item = {
   id: string;
@@ -42,6 +44,7 @@ const MAIN_ITEMS: Item[] = [
   { id: "todo", label: "Todo list", keywords: "todo task checkbox" },
   { id: "quote", label: "Quote", keywords: "quote blockquote" },
   { id: "divider", label: "Divider", keywords: "divider horizontal rule hr" },
+  { id: "emoji", label: "Emoji", keywords: "emoji smiley face emoticon" },
 ];
 
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
@@ -84,11 +87,17 @@ function applySlashChoice(
       runPipeline(live);
       break;
     case "image": {
-      const url = window.prompt("Image URL or vault path", "");
-      if (url?.trim()) {
-        insertImageMarkdown("", url.trim());
-      }
-      runPipeline(live);
+      getApi()
+        .chooseImageFile()
+        .then((res) => {
+          if (res.chosen && res.relPath) {
+            insertImageMarkdown("", res.relPath);
+          }
+          runPipeline(live);
+        })
+        .catch(() => {
+          runPipeline(live);
+        });
       break;
     }
     case "bullet":
@@ -133,19 +142,40 @@ export function SlashCommandMenu({
 
   const open = Boolean(live && detection);
 
+  /* Auto-detect /emoji prefix to switch submenu automatically */
+  const rawFilter = (detection?.filter ?? "").trim().toLowerCase();
+  const isEmojiMode = rawFilter === "emoji" || rawFilter.startsWith("emoji ");
+  const emojiSubFilter = isEmojiMode
+    ? rawFilter.slice(5).trim()
+    : "";
+
+  const activeSubmenu = isEmojiMode ? "emoji" as Submenu : submenu;
+
   useEffect(() => {
-    if (open) {
+    if (open && !isEmojiMode) {
       setSubmenu("main");
       setHighlight(0);
     }
-  }, [open, detection?.filter, detection?.slashOffset]);
+  }, [open, detection?.slashOffset]);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [isEmojiMode, rawFilter]);
 
   const filteredMain = MAIN_ITEMS.filter((it) =>
     matchesFilter(it, detection?.filter ?? "")
   );
 
+  const filteredEmoji = EMOJI_LIST.filter(
+    (e) => !emojiSubFilter || e.name.includes(emojiSubFilter) || e.emoji === emojiSubFilter
+  );
+
   const rowCount =
-    submenu === "heading" ? HEADING_LEVELS.length : filteredMain.length;
+    activeSubmenu === "heading"
+      ? HEADING_LEVELS.length
+      : activeSubmenu === "emoji"
+        ? filteredEmoji.length
+        : filteredMain.length;
 
   useEffect(() => {
     setHighlight((h) =>
@@ -177,6 +207,27 @@ export function SlashCommandMenu({
     queueMicrotask(() => onEditorInput());
   }, [onClearDetection, onEditorInput]);
 
+  const pickEmoji = useCallback(
+    (emoji: string) => {
+      if (!live || !detection) {
+        return;
+      }
+      deleteSlashCommandRange(live, detection);
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(emoji));
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      live.focus();
+      finish();
+    },
+    [live, detection, finish]
+  );
+
   const pickMain = useCallback(
     (id: string) => {
       if (!live || !detection) {
@@ -184,6 +235,11 @@ export function SlashCommandMenu({
       }
       if (id === "heading") {
         setSubmenu("heading");
+        setHighlight(0);
+        return;
+      }
+      if (id === "emoji") {
+        setSubmenu("emoji");
         setHighlight(0);
         return;
       }
@@ -258,9 +314,14 @@ export function SlashCommandMenu({
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        if (submenu === "heading") {
+        if (activeSubmenu === "heading") {
           const level = HEADING_LEVELS[highlight] ?? 2;
           pickHeading(level);
+        } else if (activeSubmenu === "emoji") {
+          const entry = filteredEmoji[highlight];
+          if (entry) {
+            pickEmoji(entry.emoji);
+          }
         } else {
           const row = filteredMain[highlight];
           if (row) {
@@ -279,9 +340,11 @@ export function SlashCommandMenu({
     rowCount,
     filteredMain,
     highlight,
-    submenu,
+    activeSubmenu,
     pickMain,
     pickHeading,
+    pickEmoji,
+    filteredEmoji,
     onClearDetection,
     onEditorInput,
   ]);
@@ -299,7 +362,7 @@ export function SlashCommandMenu({
       aria-label="Insert block"
       style={{ left: pos.left, top: pos.top }}
     >
-      {submenu === "heading" && (
+      {activeSubmenu === "heading" && (
         <div className="slash-command-menu-header">
           <button
             type="button"
@@ -314,8 +377,32 @@ export function SlashCommandMenu({
           <span className="slash-command-menu-header-title">Heading level</span>
         </div>
       )}
+      {activeSubmenu === "emoji" && (
+        <div className="slash-command-menu-header">
+          <span className="slash-command-menu-header-title">Pick an emoji{emojiSubFilter ? ` — "${emojiSubFilter}"` : ""}</span>
+        </div>
+      )}
+      {activeSubmenu === "emoji" ? (
+        <div className="slash-command-emoji-grid">
+          {filteredEmoji.map((entry, i) => (
+            <button
+              key={entry.emoji}
+              type="button"
+              title={entry.name}
+              className={`slash-command-emoji-btn${i === highlight ? " is-highlighted" : ""}`}
+              onMouseEnter={() => setHighlight(i)}
+              onClick={() => pickEmoji(entry.emoji)}
+            >
+              {entry.emoji}
+            </button>
+          ))}
+          {filteredEmoji.length === 0 && (
+            <div className="slash-command-menu-empty">No matching emoji</div>
+          )}
+        </div>
+      ) : (
       <ul className="slash-command-menu-list">
-        {submenu === "heading"
+        {activeSubmenu === "heading"
           ? HEADING_LEVELS.map((level, i) => (
               <li key={level}>
                 <button
@@ -353,6 +440,7 @@ export function SlashCommandMenu({
               </li>
             ))}
       </ul>
+      )}
       {submenu === "main" && filteredMain.length === 0 ? (
         <div className="slash-command-menu-empty">No matches</div>
       ) : null}

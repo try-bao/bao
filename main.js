@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   shell,
@@ -70,18 +71,66 @@ function mimeFromFilePath(absPath) {
   return map[ext] || "application/octet-stream";
 }
 
+/** Path to the Bao config directory at ~/.bao */
+function baoConfigDir() {
+  return path.join(app.getPath("home"), ".bao");
+}
+
+/** Path to the JSON config file that stores vault path + recent vaults. */
+function baoConfigPath() {
+  return path.join(baoConfigDir(), "config.json");
+}
+
+/** Read the full config object. */
+function readConfig() {
+  try {
+    const raw = fs.readFileSync(baoConfigPath(), "utf8");
+    const data = JSON.parse(raw);
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      return data;
+    }
+  } catch { /* first launch or corrupt */ }
+  return {};
+}
+
+/** Write the full config object. */
+function writeConfig(cfg) {
+  const dir = baoConfigDir();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(baoConfigPath(), JSON.stringify(cfg, null, 2), "utf8");
+}
+
+/** Get the list of recently opened vault paths (most recent first). */
+function getRecentVaults() {
+  const cfg = readConfig();
+  return Array.isArray(cfg.recentVaults) ? cfg.recentVaults.filter((v) => typeof v === "string" && v) : [];
+}
+
+/** Add a path to the top of the recent vaults list (max 10). */
+function addRecentVault(dir) {
+  const cfg = readConfig();
+  const recent = Array.isArray(cfg.recentVaults) ? cfg.recentVaults.filter((v) => typeof v === "string" && v) : [];
+  const filtered = recent.filter((v) => v !== dir);
+  filtered.unshift(dir);
+  cfg.recentVaults = filtered.slice(0, 10);
+  writeConfig(cfg);
+}
+
+let _vaultDir = null;
+
 function getBaoDir() {
-  return path.join(app.getPath("documents"), "bao");
+  return _vaultDir;
 }
 
 function ensureBaoFolder() {
   const dir = getBaoDir();
+  if (!dir) return null;
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function tagIndexAbs() {
-  return path.join(getBaoDir(), ".metadata", "tag_index.json");
+  return path.join(getBaoDir(), ".bao", "tag_index.json");
 }
 
 function readTagIndexFile() {
@@ -103,13 +152,14 @@ function readTagIndexFile() {
 
 function writeTagIndexFile(index) {
   ensureBaoFolder();
-  const metaDir = path.join(getBaoDir(), ".metadata");
+  const metaDir = path.join(getBaoDir(), ".bao");
   fs.mkdirSync(metaDir, { recursive: true });
   fs.writeFileSync(tagIndexAbs(), JSON.stringify(index, null, 2), "utf8");
 }
 
 function toAbs(relPath) {
   const root = getBaoDir();
+  if (!root) throw new Error("No vault open");
   const abs = path.resolve(root, relPath || ".");
   const rel = path.relative(root, abs);
   if (rel.startsWith("..") || path.isAbsolute(rel)) {
@@ -120,6 +170,7 @@ function toAbs(relPath) {
 
 function assertInsideVault(absPath) {
   const root = getBaoDir();
+  if (!root) throw new Error("No vault open");
   const rel = path.relative(root, absPath);
   if (rel.startsWith("..") || path.isAbsolute(rel)) {
     throw new Error("Invalid path");
@@ -128,6 +179,7 @@ function assertInsideVault(absPath) {
 
 function isPathInsideVault(absPath) {
   const root = getBaoDir();
+  if (!root) return false;
   const rel = path.relative(root, path.resolve(absPath));
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
@@ -148,6 +200,7 @@ function copyIntoVaultUnique(srcAbs, destDirAbs) {
   } else {
     fs.copyFileSync(srcAbs, dest);
   }
+  return dest;
 }
 
 function sanitizeName(name) {
@@ -159,52 +212,6 @@ function sanitizeName(name) {
     throw new Error("Invalid name");
   }
   return trimmed;
-}
-
-/** Turn first markdown heading text into a single path segment (no extension). */
-function headingTextToFileStem(raw) {
-  let s = String(raw ?? "").trim();
-  if (!s) {
-    return "";
-  }
-  s = s.replace(/[/\\?%*:|"<>]/g, "");
-  s = s.replace(/\s+/g, " ").trim();
-  if (s.length > 120) {
-    s = s.slice(0, 120).trim();
-  }
-  s = s.replace(/[.\s]+$/g, "");
-  if (!s) {
-    return "";
-  }
-  const upper = s.toUpperCase();
-  const reserved = new Set([
-    "CON",
-    "PRN",
-    "AUX",
-    "NUL",
-    "COM1",
-    "COM2",
-    "COM3",
-    "COM4",
-    "COM5",
-    "COM6",
-    "COM7",
-    "COM8",
-    "COM9",
-    "LPT1",
-    "LPT2",
-    "LPT3",
-    "LPT4",
-    "LPT5",
-    "LPT6",
-    "LPT7",
-    "LPT8",
-    "LPT9",
-  ]);
-  if (reserved.has(upper)) {
-    s = `${s}_`;
-  }
-  return s;
 }
 
 /** First ATX heading text (# … through ###### …), or null */
@@ -328,6 +335,12 @@ function buildApplicationMenu() {
     {
       label: "File",
       submenu: [
+        {
+          label: "New Window",
+          accelerator: isMac ? "Command+N" : "Ctrl+N",
+          click: () => createWindow(),
+        },
+        { type: "separator" },
         {
           label: "Close Tab",
           accelerator: isMac ? "Command+W" : "Ctrl+W",
@@ -455,7 +468,6 @@ function createWindow(openRelPath) {
 }
 
 app.whenReady().then(() => {
-  ensureBaoFolder();
 
   protocol.handle("vault", async (request) => {
     try {
@@ -612,8 +624,36 @@ app.whenReady().then(() => {
 
   ipcMain.handle("bao:get-data-dir", () => getBaoDir());
 
+  ipcMain.handle("bao:get-recent-vaults", () => getRecentVaults());
+
+  ipcMain.handle("bao:open-vault", (_, dir) => {
+    const d = String(dir || "").trim();
+    if (!d) throw new Error("Missing path");
+    _vaultDir = d;
+    addRecentVault(d);
+    ensureBaoFolder();
+    return { path: d };
+  });
+
+  ipcMain.handle("bao:choose-vault-folder", async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showOpenDialog(win, {
+      title: "Choose vault folder",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || !result.filePaths.length) {
+      return { chosen: false };
+    }
+    const chosen = result.filePaths[0];
+    _vaultDir = chosen;
+    addRecentVault(chosen);
+    ensureBaoFolder();
+    return { chosen: true, path: chosen };
+  });
+
   ipcMain.handle("bao:reveal-in-file-manager", async (_, relPath) => {
     const root = getBaoDir();
+    if (!root) throw new Error("No vault open");
     const abs =
       relPath == null || relPath === "" ? root : toAbs(relPath);
     if (!fs.existsSync(abs)) {
@@ -628,6 +668,35 @@ app.whenReady().then(() => {
     } else {
       shell.showItemInFolder(abs);
     }
+  });
+
+  /** Open a native file picker for images, copy into vault, return vault-relative path. */
+  ipcMain.handle("bao:choose-image-file", async () => {
+    const root = getBaoDir();
+    if (!root) throw new Error("No vault open");
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showOpenDialog(win, {
+      title: "Choose an image",
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Images",
+          extensions: [
+            "png", "jpg", "jpeg", "gif", "webp", "svg",
+            "bmp", "avif", "tif", "tiff", "heic", "heif", "ico",
+          ],
+        },
+      ],
+    });
+    if (result.canceled || !result.filePaths.length) {
+      return { chosen: false };
+    }
+    const srcAbs = result.filePaths[0];
+    const imagesDir = path.join(root, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+    const destAbs = copyIntoVaultUnique(srcAbs, imagesDir);
+    const relPath = path.relative(root, destAbs);
+    return { chosen: true, relPath };
   });
 
   /** Open a vault file with the OS default application (e.g. Preview for images). */
@@ -655,11 +724,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle("bao:list-tree", () => {
     const root = getBaoDir();
+    if (!root) return [];
     return buildTree(root, "");
   });
 
   ipcMain.handle("bao:search-in-vault", (_, query) => {
     const root = getBaoDir();
+    if (!root) return [];
     const results = [];
     const q = String(query || "").toLowerCase();
     if (!q) {
@@ -833,44 +904,6 @@ app.whenReady().then(() => {
     return true;
   });
 
-  ipcMain.handle("bao:rename-to-heading", (_, fromRel, headingText) => {
-    const root = getBaoDir();
-    if (!String(fromRel).toLowerCase().endsWith(".md")) {
-      return { newRelPath: fromRel, renamed: false };
-    }
-
-    const stem = headingTextToFileStem(headingText);
-    if (!stem) {
-      return { newRelPath: fromRel, renamed: false };
-    }
-
-    const fromAbs = toAbs(fromRel);
-    const parentAbs = path.dirname(fromAbs);
-    const curName = path.basename(fromAbs);
-    const curStem = curName.replace(/\.md$/i, "");
-
-    if (stem.toLowerCase() === curStem.toLowerCase()) {
-      return { newRelPath: fromRel, renamed: false };
-    }
-
-    let candidateFile = `${stem}.md`;
-    let destAbs = path.join(parentAbs, candidateFile);
-    let n = 2;
-
-    while (fs.existsSync(destAbs)) {
-      if (path.resolve(destAbs) === path.resolve(fromAbs)) {
-        return { newRelPath: fromRel, renamed: false };
-      }
-      candidateFile = `${stem} (${n}).md`;
-      destAbs = path.join(parentAbs, candidateFile);
-      n += 1;
-    }
-
-    fs.renameSync(fromAbs, destAbs);
-    const newRel = path.relative(root, destAbs).split(path.sep).join("/");
-    return { newRelPath: newRel, renamed: true };
-  });
-
   ipcMain.handle("bao:rename-item", (_, fromRel, newNameRaw) => {
     const root = getBaoDir();
     const fromAbs = toAbs(fromRel);
@@ -941,6 +974,59 @@ app.whenReady().then(() => {
       fs.unlinkSync(abs);
     }
     return true;
+  });
+
+  ipcMain.handle("bao:export-pdf", async (event, { html, suggestedName }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const defaultName = String(suggestedName || "export").replace(/\.md$/i, "") + ".pdf";
+    const result = await dialog.showSaveDialog(win, {
+      title: "Export as PDF",
+      defaultPath: defaultName,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    });
+    if (result.canceled || !result.filePath) {
+      return { saved: false };
+    }
+
+    const pdfWin = new BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    const styledHtml = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         max-width: 700px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a; line-height: 1.6; font-size: 14px; }
+  h1 { font-size: 1.8em; margin-top: 0; }
+  h2 { font-size: 1.4em; }
+  h3 { font-size: 1.2em; }
+  pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+  code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-size: 13px; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid #ddd; margin-left: 0; padding-left: 16px; color: #555; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background: #f5f5f5; }
+  img { max-width: 100%; height: auto; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+  ul, ol { padding-left: 24px; }
+  a { color: #0366d6; text-decoration: none; }
+</style></head><body>${html}</body></html>`;
+
+    await pdfWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(styledHtml));
+    const pdfBuffer = await pdfWin.webContents.printToPDF({
+      printBackground: true,
+      margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+    });
+    pdfWin.close();
+
+    fs.writeFileSync(result.filePath, pdfBuffer);
+    return { saved: true, filePath: result.filePath };
   });
 
   createWindow();

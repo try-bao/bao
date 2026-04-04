@@ -1,5 +1,4 @@
 import type { BaoTreeNode } from "../types";
-import * as note from "./noteUtils";
 
 /**
  * Keep folders that match the query or contain a matching descendant; keep files whose
@@ -15,9 +14,7 @@ export function filterTreeByQuery(
   }
 
   function matchesFile(n: BaoTreeNode): boolean {
-    const display = note.basenameNoMd(n.relPath).toLowerCase();
     return (
-      display.includes(q) ||
       n.name.toLowerCase().includes(q) ||
       n.relPath.toLowerCase().includes(q)
     );

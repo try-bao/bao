@@ -1556,9 +1556,32 @@
           return;
         }
 
+        // * with selection → italic; if already italic → upgrade to bold
+        if (e.key === "*" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          var insideEm = false;
+          var _n = sel.anchorNode;
+          while (_n && _n !== el) {
+            if (_n.nodeType === 1 && (_n.tagName === "EM" || _n.tagName === "I")) {
+              insideEm = true;
+              break;
+            }
+            _n = _n.parentNode;
+          }
+          if (insideEm) {
+            // Already italic → remove italic, apply bold (* + * = **)
+            document.execCommand("italic");
+            document.execCommand("bold");
+          } else {
+            document.execCommand("italic");
+          }
+          runMarkdownPipeline();
+          onChange();
+          return;
+        }
+
         var wrapPairs = {
           "`": ["`", "`"],
-          "*": ["*", "*"],
           _: ["_", "_"],
           "(": ["(", ")"],
           "[": ["[", "]"],

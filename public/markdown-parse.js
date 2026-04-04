@@ -218,6 +218,20 @@
           i += mail[0].length;
           continue;
         }
+        // Inline HTML tag (opening, closing, or self-closing) — pass through.
+        const htmlTag = rest.match(/^<\/?[a-zA-Z][a-zA-Z0-9]*\b[^>]*\/?>/);
+        if (htmlTag) {
+          out += htmlTag[0];
+          i += htmlTag[0].length;
+          continue;
+        }
+        // HTML comment — pass through.
+        const htmlComment = rest.match(/^<!--[\s\S]*?-->/);
+        if (htmlComment) {
+          out += htmlComment[0];
+          i += htmlComment[0].length;
+          continue;
+        }
       }
 
       out += escapeHtml(ch);
@@ -563,6 +577,28 @@
    * @param {string} md
    * @returns {string}
    */
+  // Recognised HTML block-level tag names (CommonMark §4.6).
+  var HTML_BLOCK_TAGS = /^(address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h1|h2|h3|h4|h5|h6|head|header|hgroup|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|pre|section|source|style|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)$/i;
+
+  /**
+   * Detect whether a (stripped) line starts an HTML block.
+   * Returns true for lines beginning with an HTML tag whose name is a known
+   * block-level element, or self-closing tags like `<img … />`.
+   */
+  function isHtmlBlockLine(stripped) {
+    // Must start with '<'
+    var t = stripped.trimStart();
+    if (t[0] !== "<") return false;
+    // Match opening tag, closing tag, or self-closing tag
+    var m = t.match(/^<\/?([a-zA-Z][a-zA-Z0-9]*)/);
+    if (!m) return false;
+    var tagName = m[1];
+    if (HTML_BLOCK_TAGS.test(tagName)) return true;
+    // Also pass through self-closing void elements like <img … />
+    if (/^<(img|br|hr|input|source|embed|col|area|wbr)\b/i.test(t)) return true;
+    return false;
+  }
+
   function parseMarkdownToHtml(md) {
     if (md == null || md === "") {
       return "";
@@ -578,6 +614,19 @@
 
       if (cl.trim() === "") {
         i += 1;
+        continue;
+      }
+
+      // HTML block: pass through raw HTML lines until a blank line.
+      if (isHtmlBlockLine(cl)) {
+        var htmlLines = [];
+        while (i < lines.length) {
+          var hl = stripMarkers(lines[i]);
+          if (hl.trim() === "" && htmlLines.length > 0) break;
+          htmlLines.push(lines[i]);
+          i += 1;
+        }
+        blocks.push(htmlLines.join("\n"));
         continue;
       }
 
@@ -691,6 +740,7 @@
       while (i < lines.length) {
         const L = stripMarkers(lines[i]);
         if (L.trim() === "") break;
+        if (isHtmlBlockLine(L)) break;
         if (isHrLine(L)) break;
         if (/^```/.test(L)) break;
         if (/^#{1,6}\s/.test(L)) break;
@@ -722,6 +772,11 @@
       }
       if (node.nodeType !== 1) continue;
       const t = node.tagName.toLowerCase();
+      // Preserve elements with non-markdown attributes as raw HTML.
+      if (hasNonMdAttrs(node)) {
+        s += serializeToHtml(node);
+        continue;
+      }
       if (t === "strong" || t === "b") {
         s += "**" + inlineToMd(node) + "**";
       } else if (t === "em" || t === "i") {
@@ -811,6 +866,37 @@
     return o + "\n";
   }
 
+  /**
+   * Check if an element has HTML attributes that would be lost in a pure
+   * markdown round-trip (e.g. align, style, class, id).  Attributes added by
+   * the editor itself (contenteditable, data-md-*, draggable, aria-*) are
+   * ignored.
+   */
+  function hasNonMdAttrs(el) {
+    // Attributes the editor adds — not authored by the user.
+    var skip = /^(contenteditable|draggable|data-md-|aria-|role|tabindex|class)/;
+    for (var j = 0; j < el.attributes.length; j++) {
+      var a = el.attributes[j].name.toLowerCase();
+      if (!skip.test(a)) {
+        // For known markdown-native attrs on specific tags, allow them
+        var tag = el.tagName.toLowerCase();
+        if (tag === "a" && (a === "href" || a === "rel")) continue;
+        if (tag === "img" && (a === "src" || a === "alt")) continue;
+        if (tag === "input" && (a === "type" || a === "checked")) continue;
+        if (tag === "code" && a === "class") continue;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Serialise a DOM element back to an HTML string (outerHTML). */
+  function serializeToHtml(el) {
+    // Use outerHTML if available (always is in browser / jsdom).
+    if (typeof el.outerHTML === "string") return el.outerHTML;
+    return "";
+  }
+
   function blockToMd(node) {
     if (node.nodeType === 3) {
       return node.textContent;
@@ -819,6 +905,11 @@
       return "";
     }
     const tag = node.tagName.toLowerCase();
+    // If the element carries HTML-only attributes (align, style, etc.),
+    // preserve it as raw HTML so the attributes survive the round-trip.
+    if (hasNonMdAttrs(node)) {
+      return serializeToHtml(node) + "\n\n";
+    }
     if (tag === "h1") return "# " + inlineToMd(node).trim() + "\n\n";
     if (tag === "h2") return "## " + inlineToMd(node).trim() + "\n\n";
     if (tag === "h3") return "### " + inlineToMd(node).trim() + "\n\n";
@@ -869,6 +960,9 @@
       return o;
     }
     if (tag === "meta" || tag === "link" || tag === "style" || tag === "script") {
+      return "";
+    }
+    if (node.getAttribute("aria-hidden") === "true" || node.getAttribute("contenteditable") === "false") {
       return "";
     }
     return inlineToMd(node) + "\n\n";

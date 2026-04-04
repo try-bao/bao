@@ -57,6 +57,14 @@ export function ShortcutsPage() {
               </span>
             </li>
             <li className="shortcuts-row">
+              <span className="shortcuts-desc">New window</span>
+              <span className="shortcuts-keys">
+                <kbd className="kbd">⌘</kbd>
+                <kbd className="kbd">N</kbd> / <kbd className="kbd">Ctrl</kbd>
+                <kbd className="kbd">N</kbd>
+              </span>
+            </li>
+            <li className="shortcuts-row">
               <span className="shortcuts-desc">
                 Toggle file list (sidebar, when editor not focused)
               </span>

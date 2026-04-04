@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getApi } from "../lib/api";
 import { useAppStore } from "../store/useAppStore";
+import { formatErr } from "../lib/formatErr";
 
 function revealMenuLabel(platform: string): string {
   if (platform === "darwin") {
@@ -77,6 +78,8 @@ export function ContextMenu() {
     !renameTarget!.isDirectory &&
     renameTarget!.relPath.toLowerCase().endsWith(".md");
 
+  const showExportPdf = showDup;
+
   const platform = getApi().platform;
 
   const menu = (
@@ -127,11 +130,8 @@ export function ContextMenu() {
           const api = getApi();
           const rel = renameTarget?.relPath ?? null;
           void api.revealInFileManager(rel).catch((err) => {
-            window.alert(
-              err instanceof Error
-                ? err.message
-                : "Could not reveal in file manager."
-            );
+            console.error(err);
+            window.alert(formatErr("Could not reveal in file manager.", err));
           });
         }}
       >
@@ -150,6 +150,35 @@ export function ContextMenu() {
         }}
       >
         Duplicate
+      </button>
+      <button
+        type="button"
+        className={`context-menu-item${showExportPdf ? "" : " hidden"}`}
+        role="menuitem"
+        onClick={(e) => {
+          e.stopPropagation();
+          hideContextMenu();
+          if (showExportPdf) {
+            const relPath = renameTarget!.relPath;
+            const fileName = relPath.split("/").pop() || "export";
+            void (async () => {
+              try {
+                const api = getApi();
+                const md = await api.readFile(relPath);
+                const html =
+                  typeof window.parseMarkdownToHtml === "function"
+                    ? window.parseMarkdownToHtml(md)
+                    : `<pre>${md}</pre>`;
+                await api.exportPdf(html, fileName);
+              } catch (err) {
+                console.error(err);
+                window.alert(formatErr("Failed to export PDF.", err));
+              }
+            })();
+          }
+        }}
+      >
+        Export as PDF
       </button>
       <button
         type="button"

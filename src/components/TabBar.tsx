@@ -5,6 +5,7 @@ import {
 } from "../lib/tabStrip";
 import { getApi } from "../lib/api";
 import { useAppStore } from "../store/useAppStore";
+import { formatErr } from "../lib/formatErr";
 
 const TAB_DND_MIME = "application/x-bao-tab";
 
@@ -57,7 +58,7 @@ export function TabBar() {
   const switchToTab = useAppStore((s) => s.switchToTab);
   const closeTab = useAppStore((s) => s.closeTab);
   const moveTabToIndex = useAppStore((s) => s.moveTabToIndex);
-  const openNewTabModal = useAppStore((s) => s.openNewTabModal);
+  const openUntitledTab = useAppStore((s) => s.openUntitledTab);
   const toggleChat = useAppStore((s) => s.toggleChat);
   const chatOpen = useAppStore((s) => s.chatOpen);
 
@@ -157,9 +158,8 @@ export function TabBar() {
               });
               if (!result.ok) {
                 if (!result.cancelled) {
-                  window.alert(
-                    result.error ?? "Could not move tab into this window."
-                  );
+                  if (result.error) console.error(result.error);
+                  window.alert(formatErr("Could not move tab into this window.", result.error));
                 }
               } else {
                 useAppStore.getState().importTransferredTab({
@@ -170,11 +170,8 @@ export function TabBar() {
                 });
               }
             } catch (err) {
-              window.alert(
-                err instanceof Error
-                  ? err.message
-                  : "Could not move tab into this window."
-              );
+              console.error(err);
+              window.alert(formatErr("Could not move tab into this window.", err));
             } finally {
               finish();
             }
@@ -207,16 +204,16 @@ export function TabBar() {
             return;
           }
           if (r.kind === "error") {
-            window.alert(r.message);
+            console.error(r.message);
+            window.alert(formatErr("Could not move tab into this window.", r.message));
             return;
           }
           if (r.kind === "cross-window") {
             const { result, relPath } = r;
             if (!result.ok) {
               if (!result.cancelled) {
-                window.alert(
-                  result.error ?? "Could not move tab into this window."
-                );
+                if (result.error) console.error(result.error);
+                window.alert(formatErr("Could not move tab into this window.", result.error));
               }
               return;
             }
@@ -228,11 +225,8 @@ export function TabBar() {
             });
           }
         } catch (err) {
-          window.alert(
-            err instanceof Error
-              ? err.message
-              : "Could not move tab into this window."
-          );
+          console.error(err);
+          window.alert(formatErr("Could not move tab into this window.", err));
         } finally {
           finish();
         }
@@ -382,7 +376,7 @@ export function TabBar() {
             className="editor-tab-add"
             aria-label="New note"
             title="New note"
-            onClick={() => openNewTabModal()}
+            onClick={() => openUntitledTab()}
           >
             +
           </button>

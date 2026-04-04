@@ -25,7 +25,7 @@ function headerFieldTitle(tab: EditorTab): string {
     return tabStripTitle(tab, true);
   }
   const sp = note.splitLeadingAtxHeading(tab.buffer);
-  return sp.headingText ?? note.basenameNoMd(tab.relPath);
+  return sp.headingText ?? (tab.relPath.split("/").pop() ?? tab.relPath);
 }
 
 export function EditorHeader() {
@@ -121,7 +121,7 @@ export function EditorHeader() {
     [noteTags, persistNoteTags]
   );
 
-  if (!tab || !tab.relPath) {
+  if (!tab || !tab.relPath || note.isScratchPath(tab.relPath)) {
     return null;
   }
 

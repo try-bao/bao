@@ -14,12 +14,14 @@ import { NewItemModal } from "./components/NewItemModal";
 import { ContextMenu } from "./components/ContextMenu";
 import { FileNotesDock } from "./components/FileNotesDock";
 import { SelectionStyleToolbar } from "./components/SelectionStyleToolbar";
+import { VaultPicker } from "./components/VaultPicker";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import { getApi } from "./lib/api";
 
 export default function App() {
   useGlobalShortcuts();
 
+  const vaultPathDisplay = useAppStore((s) => s.vaultPathDisplay);
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const chatOpen = useAppStore((s) => s.chatOpen);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
@@ -81,6 +83,8 @@ export default function App() {
     }
     void (async () => {
       try {
+        await useAppStore.getState().loadVaultPath();
+        await useAppStore.getState().refreshTree();
         await useAppStore.getState().tryOpenFile(path);
       } catch {
         /* tryOpenFile already alerts on failure */
@@ -97,8 +101,6 @@ export default function App() {
       window.removeEventListener("bao-vault-files-changed", onVaultFiles);
   }, [refreshTree]);
 
-  const overlayOpen = settingsOpen || shortcutsOpen;
-
   const activeBuffer = useAppStore((s) => {
     const t = s.tabs.find((x) => x.id === s.activeTabId);
     return t?.buffer ?? "";
@@ -111,6 +113,12 @@ export default function App() {
     const minutes = Math.max(1, Math.ceil(words / 200));
     return { chars, words, minutes };
   }, [activeBuffer]);
+
+  if (!vaultPathDisplay) {
+    return <VaultPicker />;
+  }
+
+  const overlayOpen = settingsOpen || shortcutsOpen;
 
   const imageRelPath =
     activeRelPath && note.isImageRelPath(activeRelPath)
@@ -130,7 +138,7 @@ export default function App() {
         >
           <section className="editor-panel">
             <TabBar />
-            {activeRelPath ? (
+            {activeRelPath && !note.isScratchPath(activeRelPath) ? (
               <div className="editor-path-bar" title={activeRelPath}>
                 <p className="editor-path-bar__text">
                   {activeRelPath}
@@ -142,6 +150,13 @@ export default function App() {
                       </time>)
                     </span>
                   ) : null}
+                </p>
+              </div>
+            ) : null}
+            {activeRelPath && note.isScratchPath(activeRelPath) ? (
+              <div className="editor-path-bar editor-path-bar--scratch">
+                <p className="editor-path-bar__text editor-path-bar__text--scratch">
+                  Unsaved file — data will be lost if not saved
                 </p>
               </div>
             ) : null}
@@ -166,12 +181,12 @@ export default function App() {
               ) : <div />}
               <div className="editor-bottom-actions" role="toolbar" aria-label="Help and settings">
                 {!overlayOpen ? <FileNotesDock /> : null}
-                {activeRelPath?.toLowerCase().endsWith(".md") ? (
+                {activeRelPath?.toLowerCase().endsWith(".md") || note.isHtmlRelPath(activeRelPath ?? "") ? (
                   <button
                     type="button"
                     className={`workspace-corner-btn${sourceMode ? " is-active" : ""}`}
-                    title={sourceMode ? "Rich text view" : "View markdown source"}
-                    aria-label={sourceMode ? "Rich text view" : "View markdown source"}
+                    title={sourceMode ? "Rich text view" : "View source"}
+                    aria-label={sourceMode ? "Rich text view" : "View source"}
                     aria-pressed={sourceMode}
                     onClick={toggleSourceMode}
                   >

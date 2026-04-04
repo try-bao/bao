@@ -79,7 +79,7 @@ function TreeRow({
           }}
         />
         <span className="tree-label">
-          {node.isDirectory ? node.name : note.basenameNoMd(node.relPath)}
+          {node.name}
         </span>
       </div>
       {node.isDirectory &&
@@ -116,10 +116,11 @@ export function FileTree({
 }) {
   const treeNodes = useAppStore((s) => s.treeNodes);
   const [tagIndex, setTagIndex] = useState<Record<string, string[]>>({});
+  const tagIndexRevision = useAppStore((s) => s.tagIndexRevision);
 
   useEffect(() => {
     loadTagIndex().then(setTagIndex);
-  }, []);
+  }, [tagIndexRevision]);
 
   const displayNodes = useMemo(() => {
     let nodes = filterTreeByQuery(treeNodes, vaultSearchQuery);

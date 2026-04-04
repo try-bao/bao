@@ -1,14 +1,24 @@
 import type { EditorTab, TreeSelection } from "../types";
 
-/** Vault-relative paths that can open as an editor tab (markdown or image preview). */
+/** Vault-relative paths that can open as an editor tab (markdown, HTML, or image preview). */
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i;
+const HTML_EXT_RE = /\.html?$/i;
+const SCRATCH_PREFIX = ".bao/.scratch-";
+
+export function isScratchPath(relPath: string): boolean {
+  return relPath.startsWith(SCRATCH_PREFIX);
+}
 
 export function isImageRelPath(relPath: string): boolean {
   return IMAGE_EXT_RE.test(relPath);
 }
 
+export function isHtmlRelPath(relPath: string): boolean {
+  return HTML_EXT_RE.test(relPath);
+}
+
 export function isOpenableInEditor(relPath: string): boolean {
-  return relPath.toLowerCase().endsWith(".md") || isImageRelPath(relPath);
+  return relPath.toLowerCase().endsWith(".md") || isHtmlRelPath(relPath) || isImageRelPath(relPath);
 }
 
 export function basenameNoMd(relPath: string): string {
@@ -27,19 +37,6 @@ export function tabStemFromRelPath(relPath: string): string {
     return base.slice(0, i);
   }
   return base;
-}
-
-export function headingMatchesFilenameStem(
-  heading: string,
-  filenameStem: string
-): boolean {
-  const a = String(heading || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-  const b = String(filenameStem || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-  return a.length > 0 && a === b;
 }
 
 export function titleFromMarkdown(content: string): string | null {
@@ -99,6 +96,10 @@ export function editorDisplayTitle(
   if (!relPath) {
     return "No file open";
   }
+  if (isScratchPath(relPath)) {
+    const heading = titleFromMarkdown(content);
+    return heading || "Untitled";
+  }
   if (!relPath.toLowerCase().endsWith(".md")) {
     return relPath.split("/").pop() || relPath;
   }
@@ -106,7 +107,7 @@ export function editorDisplayTitle(
   if (heading) {
     return heading;
   }
-  return "Untitled";
+  return relPath.split("/").pop()?.replace(/\.md$/i, "") || relPath;
 }
 
 export function noteContentWithCopyHeading(
@@ -125,6 +126,9 @@ export function noteContentWithCopyHeading(
 export function isTabDirty(tab: EditorTab): boolean {
   if (tab.relPath && isImageRelPath(tab.relPath)) {
     return false;
+  }
+  if (tab.relPath && isScratchPath(tab.relPath)) {
+    return true;
   }
   return tab.buffer !== tab.lastSavedContent;
 }
