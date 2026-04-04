@@ -1,7 +1,7 @@
 {
   "name": "bao",
-  "version": "1.0.0",
-  "description": "The most powerful Markdown editor that you've ever seen.",
+  "version": "1.0.1",
+  "description": "The most minimalistic and powerful Markdown editor that you've ever seen.",
   "main": "main.js",
   "private": true,
   "scripts": {
