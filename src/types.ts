@@ -28,9 +28,14 @@ export interface BaoApi {
   platform: string;
   onShowKeyboardShortcuts: (callback: () => void) => () => void;
   onCloseTab: (callback: () => void) => () => void;
-  getDataDir: () => Promise<string>;
+  getDataDir: () => Promise<string | null>;
+  getRecentVaults: () => Promise<string[]>;
+  openVault: (dir: string) => Promise<{ path: string }>;
+  chooseVaultFolder: () => Promise<{ chosen: boolean; path?: string }>;
   /** `null` or `""` reveals the vault root folder. */
   revealInFileManager: (relPath: string | null) => Promise<void>;
+  /** Open a native file picker for images; copies the file into the vault root and returns the vault-relative path. */
+  chooseImageFile: () => Promise<{ chosen: boolean; relPath?: string }>;
   /** Open a vault-relative file with the default app (e.g. images in Preview). */
   openVaultFile: (relPath: string) => Promise<void>;
   /** Open an http(s) URL in the system browser. */
@@ -66,10 +71,6 @@ export interface BaoApi {
     toParentRel: string
   ) => Promise<{ newRelPath: string }>;
   importPaths: (paths: string[], parentRel: string) => Promise<void>;
-  renameToHeading: (
-    fromRel: string,
-    headingText: string
-  ) => Promise<{ newRelPath: string; renamed: boolean }>;
   renameItem: (
     fromRel: string,
     newName: string

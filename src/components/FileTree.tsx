@@ -79,7 +79,7 @@ function TreeRow({
           }}
         />
         <span className="tree-label">
-          {node.isDirectory ? node.name : note.basenameNoMd(node.relPath)}
+          {node.name}
         </span>
       </div>
       {node.isDirectory &&

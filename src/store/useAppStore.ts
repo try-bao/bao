@@ -133,7 +133,7 @@ interface AppState {
 
   chatMessages: ChatBubble[];
 
-  vaultPathDisplay: string;
+  vaultPathDisplay: string | null;
 
   flushActiveBuffer: () => void;
   onEditorInput: () => void;
@@ -187,6 +187,9 @@ interface AppState {
 
   setClipboardNote: (relPath: string | null) => void;
   loadVaultPath: () => Promise<void>;
+  changeVault: () => Promise<void>;
+  openVault: (dir: string) => Promise<void>;
+  closeVault: () => void;
 
   fileNotesByPath: Record<string, FileNoteEntry[]>;
   fileNotesRevision: number;
@@ -253,7 +256,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
 
   chatMessages: [],
 
-  vaultPathDisplay: "Loading…",
+  vaultPathDisplay: null,
 
   fileNotesByPath: {},
   fileNotesRevision: 0,
@@ -1017,34 +1020,7 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
             : t
         ),
       });
-      if (savedPath.toLowerCase().endsWith(".md")) {
-        const heading = note.titleFromMarkdown(tab.buffer);
-        if (heading) {
-          const { newRelPath, renamed } = await api.renameToHeading(
-            savedPath,
-            heading
-          );
-          if (renamed && newRelPath !== savedPath) {
-            await syncTagIndexRename(savedPath, newRelPath);
-            await renameFileNotesSidecar(api, savedPath, newRelPath);
-            set((st) => ({
-              tabs: st.tabs.map((x) =>
-                x.relPath === savedPath ? { ...x, relPath: newRelPath } : x
-              ),
-              selection:
-                st.selection?.relPath === savedPath
-                  ? { relPath: newRelPath, isDirectory: false }
-                  : st.selection,
-              fileNotesByPath: remapFileNotesStateKey(
-                st.fileNotesByPath,
-                savedPath,
-                newRelPath
-              ),
-              fileNotesRevision: st.fileNotesRevision + 1,
-            }));
-          }
-        }
-      }
+
       const tAfterSave = get().tabs.find((x) => x.id === tab.id);
       const statPath = tAfterSave?.relPath ?? savedPath;
       const mtimeAfterSave = await getFileMtimeMsSafe(statPath);
@@ -1356,8 +1332,61 @@ export const useAppStore = createWithEqualityFn<AppState>((set, get) => ({
       const dir = await api.getDataDir();
       set({ vaultPathDisplay: dir });
     } catch {
-      set({ vaultPathDisplay: "—" });
+      set({ vaultPathDisplay: null });
     }
+  },
+
+  openVault: async (dir: string) => {
+    const api = getApi();
+    await api.openVault(dir);
+    set({
+      vaultPathDisplay: dir,
+      tabs: [],
+      activeTabId: null,
+      expanded: {},
+      selection: null,
+      multiSelection: [],
+      fileNotesByPath: {},
+      fileNotesRevision: 0,
+      clipboardNoteRelPath: null,
+    });
+    await get().refreshTree();
+  },
+
+  changeVault: async () => {
+    const api = getApi();
+    const result = await api.chooseVaultFolder();
+    if (!result.chosen) return;
+    set({
+      vaultPathDisplay: result.path ?? null,
+      tabs: [],
+      activeTabId: null,
+      expanded: {},
+      selection: null,
+      multiSelection: [],
+      fileNotesByPath: {},
+      fileNotesRevision: 0,
+      clipboardNoteRelPath: null,
+    });
+    await get().refreshTree();
+  },
+
+  closeVault: () => {
+    set({
+      vaultPathDisplay: null,
+      tabs: [],
+      activeTabId: null,
+      treeNodes: [],
+      treeError: null,
+      expanded: {},
+      selection: null,
+      multiSelection: [],
+      fileNotesByPath: {},
+      fileNotesRevision: 0,
+      clipboardNoteRelPath: null,
+      settingsOpen: false,
+      shortcutsOpen: false,
+    });
   },
 }));
 

@@ -16,9 +16,10 @@ import {
   deleteSlashCommandRange,
   type SlashDetection,
 } from "../lib/slashCommand";
+import { getApi } from "../lib/api";
 import { useAppStore } from "../store/useAppStore";
 
-type Submenu = "main" | "heading";
+type Submenu = "main" | "heading" | "emoji";
 
 type Item = {
   id: string;
@@ -42,6 +43,75 @@ const MAIN_ITEMS: Item[] = [
   { id: "todo", label: "Todo list", keywords: "todo task checkbox" },
   { id: "quote", label: "Quote", keywords: "quote blockquote" },
   { id: "divider", label: "Divider", keywords: "divider horizontal rule hr" },
+  { id: "emoji", label: "Emoji", keywords: "emoji smiley face emoticon" },
+];
+
+type EmojiEntry = { emoji: string; name: string };
+
+const EMOJI_LIST: EmojiEntry[] = [
+  { emoji: "😀", name: "grinning face" },
+  { emoji: "😂", name: "joy tears laughing" },
+  { emoji: "😅", name: "sweat smile nervous" },
+  { emoji: "😊", name: "blush happy" },
+  { emoji: "😍", name: "heart eyes love" },
+  { emoji: "🥰", name: "smiling hearts love" },
+  { emoji: "😎", name: "sunglasses cool" },
+  { emoji: "🤔", name: "thinking think" },
+  { emoji: "😢", name: "cry sad" },
+  { emoji: "😡", name: "angry mad rage" },
+  { emoji: "🥳", name: "party celebrate" },
+  { emoji: "😴", name: "sleeping sleep zzz" },
+  { emoji: "🤯", name: "mind blown exploding" },
+  { emoji: "🫡", name: "salute" },
+  { emoji: "👍", name: "thumbs up yes good" },
+  { emoji: "👎", name: "thumbs down no bad" },
+  { emoji: "👏", name: "clap applause" },
+  { emoji: "🙌", name: "raised hands hooray" },
+  { emoji: "🤝", name: "handshake deal" },
+  { emoji: "✌️", name: "peace victory" },
+  { emoji: "🫶", name: "heart hands love" },
+  { emoji: "💪", name: "muscle strong flex" },
+  { emoji: "🔥", name: "fire hot lit" },
+  { emoji: "⭐", name: "star" },
+  { emoji: "✨", name: "sparkles magic" },
+  { emoji: "💡", name: "light bulb idea" },
+  { emoji: "❤️", name: "red heart love" },
+  { emoji: "💔", name: "broken heart" },
+  { emoji: "💯", name: "hundred perfect" },
+  { emoji: "🎉", name: "party popper tada" },
+  { emoji: "🎯", name: "bullseye target dart" },
+  { emoji: "🚀", name: "rocket launch" },
+  { emoji: "⚡", name: "lightning zap bolt" },
+  { emoji: "🌟", name: "glowing star" },
+  { emoji: "🌈", name: "rainbow" },
+  { emoji: "☀️", name: "sun sunny" },
+  { emoji: "🌙", name: "moon night" },
+  { emoji: "🍕", name: "pizza food" },
+  { emoji: "☕", name: "coffee cup" },
+  { emoji: "🎵", name: "music note" },
+  { emoji: "📌", name: "pin pushpin" },
+  { emoji: "📝", name: "memo note write" },
+  { emoji: "📎", name: "paperclip attach" },
+  { emoji: "📅", name: "calendar date" },
+  { emoji: "✅", name: "check mark done" },
+  { emoji: "❌", name: "cross mark no" },
+  { emoji: "⚠️", name: "warning caution" },
+  { emoji: "❓", name: "question mark" },
+  { emoji: "❗", name: "exclamation alert" },
+  { emoji: "💬", name: "speech bubble chat" },
+  { emoji: "👀", name: "eyes look see" },
+  { emoji: "🐛", name: "bug insect" },
+  { emoji: "🏷️", name: "tag label" },
+  { emoji: "📦", name: "package box" },
+  { emoji: "🔒", name: "lock secure" },
+  { emoji: "🔑", name: "key" },
+  { emoji: "🗑️", name: "trash delete" },
+  { emoji: "💀", name: "skull dead" },
+  { emoji: "👻", name: "ghost" },
+  { emoji: "🤖", name: "robot bot" },
+  { emoji: "🧠", name: "brain smart" },
+  { emoji: "🎨", name: "art palette paint" },
+  { emoji: "🏆", name: "trophy award winner" },
 ];
 
 const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
@@ -84,11 +154,17 @@ function applySlashChoice(
       runPipeline(live);
       break;
     case "image": {
-      const url = window.prompt("Image URL or vault path", "");
-      if (url?.trim()) {
-        insertImageMarkdown("", url.trim());
-      }
-      runPipeline(live);
+      getApi()
+        .chooseImageFile()
+        .then((res) => {
+          if (res.chosen && res.relPath) {
+            insertImageMarkdown("", res.relPath);
+          }
+          runPipeline(live);
+        })
+        .catch(() => {
+          runPipeline(live);
+        });
       break;
     }
     case "bullet":
@@ -133,19 +209,40 @@ export function SlashCommandMenu({
 
   const open = Boolean(live && detection);
 
+  /* Auto-detect /emoji prefix to switch submenu automatically */
+  const rawFilter = (detection?.filter ?? "").trim().toLowerCase();
+  const isEmojiMode = rawFilter === "emoji" || rawFilter.startsWith("emoji ");
+  const emojiSubFilter = isEmojiMode
+    ? rawFilter.slice(5).trim()
+    : "";
+
+  const activeSubmenu = isEmojiMode ? "emoji" as Submenu : submenu;
+
   useEffect(() => {
-    if (open) {
+    if (open && !isEmojiMode) {
       setSubmenu("main");
       setHighlight(0);
     }
-  }, [open, detection?.filter, detection?.slashOffset]);
+  }, [open, detection?.slashOffset]);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [isEmojiMode, rawFilter]);
 
   const filteredMain = MAIN_ITEMS.filter((it) =>
     matchesFilter(it, detection?.filter ?? "")
   );
 
+  const filteredEmoji = EMOJI_LIST.filter(
+    (e) => !emojiSubFilter || e.name.includes(emojiSubFilter) || e.emoji === emojiSubFilter
+  );
+
   const rowCount =
-    submenu === "heading" ? HEADING_LEVELS.length : filteredMain.length;
+    activeSubmenu === "heading"
+      ? HEADING_LEVELS.length
+      : activeSubmenu === "emoji"
+        ? filteredEmoji.length
+        : filteredMain.length;
 
   useEffect(() => {
     setHighlight((h) =>
@@ -176,6 +273,27 @@ export function SlashCommandMenu({
     onClearDetection();
     queueMicrotask(() => onEditorInput());
   }, [onClearDetection, onEditorInput]);
+
+  const pickEmoji = useCallback(
+    (emoji: string) => {
+      if (!live || !detection) {
+        return;
+      }
+      deleteSlashCommandRange(live, detection);
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(emoji));
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      live.focus();
+      finish();
+    },
+    [live, detection, finish]
+  );
 
   const pickMain = useCallback(
     (id: string) => {
@@ -258,9 +376,14 @@ export function SlashCommandMenu({
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        if (submenu === "heading") {
+        if (activeSubmenu === "heading") {
           const level = HEADING_LEVELS[highlight] ?? 2;
           pickHeading(level);
+        } else if (activeSubmenu === "emoji") {
+          const entry = filteredEmoji[highlight];
+          if (entry) {
+            pickEmoji(entry.emoji);
+          }
         } else {
           const row = filteredMain[highlight];
           if (row) {
@@ -279,9 +402,11 @@ export function SlashCommandMenu({
     rowCount,
     filteredMain,
     highlight,
-    submenu,
+    activeSubmenu,
     pickMain,
     pickHeading,
+    pickEmoji,
+    filteredEmoji,
     onClearDetection,
     onEditorInput,
   ]);
@@ -299,7 +424,7 @@ export function SlashCommandMenu({
       aria-label="Insert block"
       style={{ left: pos.left, top: pos.top }}
     >
-      {submenu === "heading" && (
+      {activeSubmenu === "heading" && (
         <div className="slash-command-menu-header">
           <button
             type="button"
@@ -314,8 +439,32 @@ export function SlashCommandMenu({
           <span className="slash-command-menu-header-title">Heading level</span>
         </div>
       )}
+      {activeSubmenu === "emoji" && (
+        <div className="slash-command-menu-header">
+          <span className="slash-command-menu-header-title">Pick an emoji{emojiSubFilter ? ` — "${emojiSubFilter}"` : ""}</span>
+        </div>
+      )}
+      {activeSubmenu === "emoji" ? (
+        <div className="slash-command-emoji-grid">
+          {filteredEmoji.map((entry, i) => (
+            <button
+              key={entry.emoji}
+              type="button"
+              title={entry.name}
+              className={`slash-command-emoji-btn${i === highlight ? " is-highlighted" : ""}`}
+              onMouseEnter={() => setHighlight(i)}
+              onClick={() => pickEmoji(entry.emoji)}
+            >
+              {entry.emoji}
+            </button>
+          ))}
+          {filteredEmoji.length === 0 && (
+            <div className="slash-command-menu-empty">No matching emoji</div>
+          )}
+        </div>
+      ) : (
       <ul className="slash-command-menu-list">
-        {submenu === "heading"
+        {activeSubmenu === "heading"
           ? HEADING_LEVELS.map((level, i) => (
               <li key={level}>
                 <button
@@ -353,6 +502,7 @@ export function SlashCommandMenu({
               </li>
             ))}
       </ul>
+      )}
       {submenu === "main" && filteredMain.length === 0 ? (
         <div className="slash-command-menu-empty">No matches</div>
       ) : null}

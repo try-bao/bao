@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { getApi } from "../lib/api";
 import { useAppStore } from "../store/useAppStore";
-import * as note from "../lib/noteUtils";
 
 export interface SearchMatch {
   relPath: string;
@@ -154,7 +153,7 @@ export function SearchPanel() {
                   </span>
                 )}
                 <span className="search-result-filename">
-                  {note.basenameNoMd(result.relPath)}
+                  {result.relPath.split("/").pop() ?? result.relPath}
                 </span>
               </span>
               <span className="search-result-count">

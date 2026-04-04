@@ -8,7 +8,7 @@ import { getMarkdownPreservingImgPaths, normalizeVaultImagesInPlace } from "../l
 import {
   applyNoteHighlightsToRenderedDom,
 } from "../lib/fileNotes";
-import { applyMarkdownToEditorRoot } from "../markdownEditorRender";
+import { applyMarkdownToEditorRoot, applyHtmlToEditorRoot } from "../markdownEditorRender";
 import { getApi } from "../lib/api";
 import * as note from "../lib/noteUtils";
 import * as tagCore from "../lib/tagIndexCore";
@@ -143,11 +143,17 @@ function MarkdownEditorActive() {
 
     const bridge: EditorBridge = {
       getMarkdown: () => {
-        if (!mdLiveRef.current || typeof window.htmlToMarkdown !== "function") {
+        if (!mdLiveRef.current) {
           return "";
         }
         const state = useAppStore.getState();
         const tab = state.tabs.find((t) => t.id === state.activeTabId);
+        if (note.isHtmlRelPath(tab?.relPath ?? "")) {
+          return mdLiveRef.current.innerHTML;
+        }
+        if (typeof window.htmlToMarkdown !== "function") {
+          return "";
+        }
         return getMarkdownPreservingImgPaths(
           mdLiveRef.current,
           tab?.relPath ?? null
@@ -155,7 +161,7 @@ function MarkdownEditorActive() {
       },
       setMarkdown: (md, opts = {}) => {
         const silent = Boolean(opts.silent);
-        if (!mdLiveRef.current || typeof window.parseMarkdownToHtml !== "function") {
+        if (!mdLiveRef.current) {
           return;
         }
         suppressRef.current = silent;
@@ -164,7 +170,12 @@ function MarkdownEditorActive() {
           const state = useAppStore.getState();
           const tab = state.tabs.find((t) => t.id === state.activeTabId);
           const noteRelPath = tab?.relPath ?? null;
-          applyMarkdownToEditorRoot(mdLiveRef.current, raw, noteRelPath);
+          if (note.isHtmlRelPath(noteRelPath ?? "")) {
+            applyHtmlToEditorRoot(mdLiveRef.current, raw, noteRelPath);
+          } else {
+            if (typeof window.parseMarkdownToHtml !== "function") return;
+            applyMarkdownToEditorRoot(mdLiveRef.current, raw, noteRelPath);
+          }
         } finally {
           suppressRef.current = false;
         }
@@ -223,8 +234,8 @@ function MarkdownEditorActive() {
           if (tab?.relPath?.toLowerCase().endsWith(".md")) {
             const notes = st.fileNotesByPath[tab.relPath] ?? [];
             if (notes.some((n) => !n.resolved)) {
-              const bodyMd = note.bodyMarkdownForEditor(st.editorBridge?.getMarkdown() ?? tab.buffer);
-              applyNoteHighlightsToRenderedDom(liveNow, bodyMd, notes);
+              const fullMd = st.editorBridge?.getMarkdown() ?? tab.buffer;
+              applyNoteHighlightsToRenderedDom(liveNow, fullMd, notes);
             } else {
               // Remove stale overlays if all notes resolved
               liveNow.querySelectorAll(".bao-note-overlay-container").forEach((el) => el.remove());
@@ -349,16 +360,19 @@ function MarkdownEditorActive() {
         ? useAppStore.getState().fileNotesByPath[tab.relPath] ?? []
         : [];
     const hasUnresolvedNote = notes.some((n) => !n.resolved);
+    const isHtml = note.isHtmlRelPath(tab.relPath ?? "");
     suppressRef.current = true;
     try {
       const raw = tab.buffer ?? "";
-      const mdForDom = raw;
-      // Render markdown normally — no markers injected
-      applyMarkdownToEditorRoot(live, mdForDom, tab.relPath);
-      // Apply note highlights as the very last step, on top of the rendered DOM
-      if (tab.relPath?.toLowerCase().endsWith(".md") && hasUnresolvedNote) {
-        const bodyMd = note.bodyMarkdownForEditor(raw);
-        applyNoteHighlightsToRenderedDom(live, bodyMd, notes);
+      if (isHtml) {
+        applyHtmlToEditorRoot(live, raw, tab.relPath);
+      } else {
+        // Render markdown normally — no markers injected
+        applyMarkdownToEditorRoot(live, raw, tab.relPath);
+        // Apply note highlights as the very last step, on top of the rendered DOM
+        if (tab.relPath?.toLowerCase().endsWith(".md") && hasUnresolvedNote) {
+          applyNoteHighlightsToRenderedDom(live, raw, notes);
+        }
       }
     } finally {
       suppressRef.current = false;
@@ -610,7 +624,7 @@ function MarkdownSourceView() {
         value={draft}
         onChange={handleChange}
         spellCheck={false}
-        aria-label="Markdown source"
+        aria-label="Source"
       />
     </div>
   );

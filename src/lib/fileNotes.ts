@@ -1,7 +1,8 @@
 import type { BaoApi } from "../types";
+import { splitLeadingAtxHeading } from "./noteUtils";
 import { getMarkdownPreservingImgPaths } from "./vaultImageUrls";
 
-/** Sidecar JSON under `.metadata/notes/<vault-path>.json` (mirrors the note file path). */
+/** Sidecar JSON under `.bao/notes/<vault-path>.json` (mirrors the note file path). */
 export interface FileNoteEntry {
   index: [number, number];
   value: string;
@@ -62,13 +63,13 @@ function getSingleSelectedImage(range: Range): HTMLImageElement | null {
   return el?.tagName === "IMG" ? (el as HTMLImageElement) : null;
 }
 
-/** `notes/foo.md` → `.metadata/notes/notes/foo.md.json` */
+/** `notes/foo.md` → `.bao/notes/notes/foo.md.json` */
 export function fileNotesSidecarRelPath(relPath: string): string {
   const norm = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!norm) {
-    return ".metadata/notes/unknown.json";
+    return ".bao/notes/unknown.json";
   }
-  return `.metadata/notes/${norm}.json`;
+  return `.bao/notes/${norm}.json`;
 }
 
 /** Legacy: `notes/foo.md` → `notes/foo_notes.json` (beside the file). */
@@ -223,11 +224,12 @@ export function injectNoteMarkersInBodyMd(
   }
   ops.sort((a, b) => b.p - a.p);
 
-  const chars = [...bodyMd];
+  // Use string slicing (UTF-16 indexing) to match how offsets are computed
+  let marked = bodyMd;
   for (const op of ops) {
-    chars.splice(op.p, 0, op.ch);
+    marked = marked.slice(0, op.p) + op.ch + marked.slice(op.p);
   }
-  return { marked: chars.join(""), noteFileIndices: kept.map((k) => k.fileIndex) };
+  return { marked, noteFileIndices: kept.map((k) => k.fileIndex) };
 }
 
 /**
@@ -343,7 +345,7 @@ function decodeEntity(entity: string): string | null {
  */
 export function applyNoteHighlightsToRenderedDom(
   root: HTMLElement,
-  bodyMd: string,
+  fullMd: string,
   notes: FileNoteEntry[]
 ): void {
   // Remove any previous overlays
@@ -351,11 +353,18 @@ export function applyNoteHighlightsToRenderedDom(
 
   if (typeof window.parseMarkdownToHtml !== "function") return;
 
-  const { marked, noteFileIndices } = injectNoteMarkersInBodyMd(bodyMd, notes);
+  // Note indices are body-relative (heading is managed by EditorHeader).
+  // Split the full markdown so we can inject markers into the body, then
+  // reconstruct the full document before parsing.  This ensures the marker
+  // positions in the parsed HTML match the full DOM (which includes the heading).
+  const { body: bodyMd } = splitLeadingAtxHeading(fullMd);
+  const headingPrefix = fullMd.slice(0, fullMd.length - bodyMd.length);
+
+  const { marked: markedBody, noteFileIndices } = injectNoteMarkersInBodyMd(bodyMd, notes);
   if (noteFileIndices.length === 0) return;
 
-  // Step 1: Parse markdown WITH markers using the real parser
-  const htmlWithMarkers = window.parseMarkdownToHtml(marked);
+  // Step 1: Parse the full markdown (heading + marked body) using the real parser
+  const htmlWithMarkers = window.parseMarkdownToHtml(headingPrefix + markedBody);
 
   // Step 2: Find marker positions in the visible text stream
   const markerRanges = extractMarkerPositionsFromHtml(htmlWithMarkers);
@@ -379,6 +388,7 @@ export function applyNoteHighlightsToRenderedDom(
   const container = document.createElement("div");
   container.className = "bao-note-overlay-container";
   container.setAttribute("aria-hidden", "true");
+  container.setAttribute("contenteditable", "false");
   container.style.cssText = "position:absolute;top:0;left:0;width:0;height:0;pointer-events:none;z-index:1;";
 
   const rootRect = root.getBoundingClientRect();
@@ -622,14 +632,29 @@ export function measureNoteOffsetsFromSelection(
   // the original (marker-free) string: the start marker at i0 shifts
   // everything after it by +1, so original_start = i0 and
   // original_end = i1 - 1 (subtracting the one marker char before i1).
-  const start = i0;
-  const end = i1 - 1;
+  let start = i0;
+  let end = i1 - 1;
 
   removeFirstMarkerPairFromLive(live);
 
   if (end <= start) {
     return null;
   }
+
+  // Note indices are body-relative (heading is managed by EditorHeader).
+  // The live editor renders the full markdown including heading, so the raw
+  // positions above are full-markdown-relative.  Subtract the heading length.
+  if (noteRelPath?.toLowerCase().endsWith(".md")) {
+    const clean = md.replaceAll(NOTE_MARK_START, "").replaceAll(NOTE_MARK_END, "");
+    const { body } = splitLeadingAtxHeading(clean);
+    const headingLen = clean.length - body.length;
+    start -= headingLen;
+    end -= headingLen;
+    if (start < 0 || end <= start) {
+      return null;
+    }
+  }
+
   return [start, end];
 }
 
@@ -696,6 +721,19 @@ export async function readFileNotesIfPresent(
   try {
     if (await api.pathExists(sidecar)) {
       return parseFileNotesJson(await api.readFile(sidecar));
+    }
+    // Migration: old .metadata/notes/ path → new .bao/notes/ path
+    const oldMetadata = sidecar.replace(/^\.bao\/notes\//, ".metadata/notes/");
+    if (oldMetadata !== sidecar && (await api.pathExists(oldMetadata))) {
+      const raw = await api.readFile(oldMetadata);
+      const list = parseFileNotesJson(raw);
+      await writeFileNotes(api, mdRelPath, list);
+      try {
+        await api.deleteItem(oldMetadata);
+      } catch {
+        /* ignore */
+      }
+      return list;
     }
     const legacy = legacyFileNotesSidecarRelPath(mdRelPath);
     if (await api.pathExists(legacy)) {

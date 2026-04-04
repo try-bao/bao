@@ -1,14 +1,19 @@
 import type { EditorTab, TreeSelection } from "../types";
 
-/** Vault-relative paths that can open as an editor tab (markdown or image preview). */
+/** Vault-relative paths that can open as an editor tab (markdown, HTML, or image preview). */
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i;
+const HTML_EXT_RE = /\.html?$/i;
 
 export function isImageRelPath(relPath: string): boolean {
   return IMAGE_EXT_RE.test(relPath);
 }
 
+export function isHtmlRelPath(relPath: string): boolean {
+  return HTML_EXT_RE.test(relPath);
+}
+
 export function isOpenableInEditor(relPath: string): boolean {
-  return relPath.toLowerCase().endsWith(".md") || isImageRelPath(relPath);
+  return relPath.toLowerCase().endsWith(".md") || isHtmlRelPath(relPath) || isImageRelPath(relPath);
 }
 
 export function basenameNoMd(relPath: string): string {
@@ -27,19 +32,6 @@ export function tabStemFromRelPath(relPath: string): string {
     return base.slice(0, i);
   }
   return base;
-}
-
-export function headingMatchesFilenameStem(
-  heading: string,
-  filenameStem: string
-): boolean {
-  const a = String(heading || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-  const b = String(filenameStem || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-  return a.length > 0 && a === b;
 }
 
 export function titleFromMarkdown(content: string): string | null {

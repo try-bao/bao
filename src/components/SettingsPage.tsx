@@ -4,6 +4,8 @@ export function SettingsPage() {
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const closeSettings = useAppStore((s) => s.closeSettings);
   const vaultPathDisplay = useAppStore((s) => s.vaultPathDisplay);
+  const changeVault = useAppStore((s) => s.changeVault);
+  const closeVault = useAppStore((s) => s.closeVault);
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const chatOpen = useAppStore((s) => s.chatOpen);
@@ -36,6 +38,22 @@ export function SettingsPage() {
             Notes are saved to this folder on your computer:
           </p>
           <p className="settings-vault-path">{vaultPathDisplay}</p>
+          <div className="settings-vault-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => changeVault()}
+            >
+              Change folder…
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { closeSettings(); closeVault(); }}
+            >
+              Close vault
+            </button>
+          </div>
         </section>
         <section className="settings-group" aria-labelledby="settings-general-heading">
           <h2 className="settings-group-title" id="settings-general-heading">
